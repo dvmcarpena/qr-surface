@@ -1,0 +1,9 @@
+qrcode[pil]
+pillow
+numpy
+opencv-python-headless
+imageio
+scikit-image
+matplotlib
+pyzbar
+tqdm
