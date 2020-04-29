@@ -1,7 +1,8 @@
 import itertools
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
+from skimage import color, img_as_ubyte, filters
 
 Array = np.ndarray
 Image = np.ndarray
