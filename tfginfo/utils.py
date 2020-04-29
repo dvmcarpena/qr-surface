@@ -107,3 +107,18 @@ def create_bounding_box(points: Array) -> Array:
     min_x, min_y = np.min(points, axis=0)
     max_x, max_y = np.max(points, axis=0)
     return np.array([(min_x, min_y), (max_x, max_y)])
+
+
+def rgb2binary(image: np.ndarray, block_size: Optional[int] = None) -> np.ndarray:
+    block_size = 151 if block_size is None else block_size
+    assert isinstance(block_size, int)
+
+    gray_image = color.rgb2gray(image)
+    threshold: np.ndarray = filters.threshold_sauvola(gray_image, block_size)
+    #threshold = filters.threshold_otsu(gray_image)
+
+    return gray_image > threshold
+
+
+def rgb2binary2rgb(image: np.ndarray, **kwargs) -> np.ndarray:
+    return img_as_ubyte(color.gray2rgb(rgb2binary(image, **kwargs)))
