@@ -88,6 +88,8 @@ def general_correction(is_lineal: bool, build_transformation_function: Callable,
     @wraps(build_transformation_function)
     def instance_correction(qr: QRCode, bitpixel: int, border: int,
                             references_features: Optional[List[MatchingFeatures]] = None) -> QRCode:
+        if bitpixel % 2 == 0:
+            raise ValueError("Bitpixel needs to be a odd number")
         if references_features is None:
             references_features = default_references_features
 
