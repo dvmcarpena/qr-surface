@@ -25,7 +25,9 @@ def find_alignment_patterns_ratios(image: Image, block_size=151, **kwargs) -> Li
             bw_image=bw_image,
             iratios=[1, 1, 1, 1, 1],
             center_color=False,
-            strict_border=False
+            strict_border=False,
+            diagonals=True,
+            countours=False
         )
     ))
 
@@ -38,8 +40,6 @@ def find_alignment_patterns_areas(image: Image, **kwargs) -> List[AlignmentPatte
 class AlignmentPatternMethods(Enum):
     CLASSIC = auto()
     AREAS = auto()
-    # ZBAR = auto()
-    # OPENCV = auto()
 
 
 _AlignmentPatternFinder = Callable[..., List[AlignmentPattern]]

@@ -16,16 +16,18 @@ def find_finder_patterns_ratios(image: Image, block_size=151, **kwargs) -> List[
 
     return list(map(
         lambda t: FinderPattern.from_center_and_ratios(
-                image=bw_image,
-                center=t[0],
-                hratios=t[1],
-                vratios=t[2]
+            image=bw_image,
+            center=t[0],
+            hratios=t[1],
+            vratios=t[2]
         ),
         find_general(
             bw_image=bw_image,
-            iratios=[1, 1, 1, 3, 1, 1, 1],
+            iratios=[1, 1, 3, 1, 1],#[1, 1, 1, 3, 1, 1, 1],
             center_color=False,
-            strict_border=False
+            strict_border=True,#False
+            diagonals=True,
+            countours=False
         )
     ))
 
@@ -38,8 +40,6 @@ def find_finder_patterns_areas(image: Image, **kwargs) -> List[FinderPattern]:
 class FinderPatternMethods(Enum):
     CLASSIC = auto()
     AREAS = auto()
-    # ZBAR = auto()
-    # OPENCV = auto()
 
 
 _FinderPatternFinder = Callable[..., List[FinderPattern]]

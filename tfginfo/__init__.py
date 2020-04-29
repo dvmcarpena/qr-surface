@@ -1,1 +1,1 @@
-from . import features, utils
+from . import decode, features, qr, utils
