@@ -34,11 +34,11 @@ def projective_correction(src: np.ndarray, dst: np.ndarray):
     )
 
 
-def cylindrical_transformation(src: np.ndarray, dst: np.ndarray, dst_size: int):
+def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, dst_size: int):
     pass
 
 
-def tps_transformation(src: np.ndarray, dst: np.ndarray, dst_size: int):
+def tps_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, dst_size: int):
     tps_inv_tps_m = RadialBasisSplines(
         source_landmarks=dst[:, ::-1],
         destiny_landmarks=src[:, ::-1],

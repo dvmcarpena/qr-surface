@@ -107,7 +107,7 @@ def general_correction(is_lineal: bool, build_transformation_function: Callable,
                 ideal_qr=ideal_qr
             )
         else:
-            inverse_map = build_transformation_function(src, dst, ideal_qr.size)
+            inverse_map = build_transformation_function(qr, src, dst, ideal_qr.size)
             return apply_nonlinear_transformation(
                 qr=qr,
                 inverse_map=inverse_map,
