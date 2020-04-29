@@ -17,6 +17,7 @@ from tfginfo.features import AlignmentPattern, Features, FinderPattern
 from tfginfo.decode import decode
 from tfginfo.matching import MatchingFeatures, References
 
+from .ideal import IdealQRCode
 from .utils import guess_version
 
 OrderedFinderPatterns = Tuple[FinderPattern, FinderPattern, FinderPattern]
