@@ -47,7 +47,7 @@ def tps_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, dst_size: i
         # smooth=1
     )
 
-    markers = np.stack(np.meshgrid(range(dst_size), range(dst_size)), axis=2)
+    markers = np.stack(np.meshgrid(np.arange(dst_size), np.arange(dst_size)), axis=2)
     markers_inv_tps = tps_inv_tps_m(*markers.reshape((-1, 2)).T)
     return lambda _: markers_inv_tps
 
