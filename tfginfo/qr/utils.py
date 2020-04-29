@@ -9,6 +9,8 @@ from sklearn import cluster
 from tfginfo.utils import Array, get_size_from_version, get_alignments_centers
 from tfginfo.features import AlignmentPattern, FinderPattern
 
+OrderedFinderPatterns = Tuple[FinderPattern, FinderPattern, FinderPattern]
+
 
 def group_finder_patterns(finder_patterns: List[FinderPattern]) -> Iterator[List[FinderPattern]]:
     if len(finder_patterns) < 3:

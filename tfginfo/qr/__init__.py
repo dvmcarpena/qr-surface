@@ -15,9 +15,7 @@ from tfginfo.matching import MatchingFeatures, References
 
 from .ideal import IdealQRCode
 from .utils import (choose_and_order_alignments, group_finder_patterns, guess_version, guess_version_from_finders,
-                    orientate_finder_patterns)
-
-OrderedFinderPatterns = Tuple[FinderPattern, FinderPattern, FinderPattern]
+                    orientate_finder_patterns, OrderedFinderPatterns)
 
 
 @unique
