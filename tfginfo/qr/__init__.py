@@ -15,7 +15,7 @@ from tfginfo.matching import MatchingFeatures, References
 
 from .ideal import IdealQRCode
 from .utils import (choose_and_order_alignments, group_finder_patterns, guess_version, guess_version_from_finders,
-                    orientate_finder_patterns, OrderedFinderPatterns)
+                    orientate_finder_patterns, OrderedFinderPatterns, find_fourth_corner)
 
 
 @unique
@@ -35,6 +35,11 @@ class QRCode:
     fourth_corner: Optional[Array]
 
     @classmethod
+    def from_image(cls, image: Image, **kwargs) -> Iterator['QRCode']:
+        features = Features.from_image(image, **kwargs)
+        return cls.from_features(image, features)
+
+    @classmethod
     def from_features(cls, image: Image, features: Features) -> Iterator['QRCode']:
         all_finder_patterns = copy.deepcopy(features.finder_patterns)
         all_alignment_patterns = copy.deepcopy(features.alignment_patterns)
@@ -52,14 +57,20 @@ class QRCode:
                 all_alignment_patterns
             )
             # plt.show()
-            # TODO Find fourth corner
+
+            fourth_corner = find_fourth_corner(
+                features.bw_image,
+                ordered_finders,
+                version,
+                all_alignment_patterns
+            )
 
             yield QRCode(
                 image=image,
                 finder_patterns=ordered_finders,
                 version=version,
                 alignment_patterns=alignment_patterns,
-                fourth_corner=None
+                fourth_corner=fourth_corner
             )
 
     def get_bounding_box_image(self):
@@ -156,9 +167,20 @@ class QRCode:
         from tfginfo.transformations import binarization
         return binarization(self, **kwargs)
 
-    def decode(self, bounding_box: bool = True):
+    def decode(self, bounding_box: bool = True, sample: bool = False):
         if bounding_box:
             image = self.get_bounding_box_image()
+        elif sample:
+            qr_sampled = copy.deepcopy(self)
+            qr_sampled.binarize()
+            qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=5, border=5)
+            # qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=5, border=5, references_features=[
+            #     MatchingFeatures.FINDER_CENTERS,
+            #     MatchingFeatures.FINDER_CORNERS,
+            #     MatchingFeatures.ALIGNMENTS_CENTERS,
+            #     MatchingFeatures.FOURTH_CORNER
+            # ])
+            image = qr_sampled.image
         else:
             image = self.image
 
@@ -178,6 +200,14 @@ class QRCode:
     def sample(self):
         qr_sampled = copy.deepcopy(self)
         qr_sampled.binarize()
+
+        # if len(list(filter(lambda a: a is not None, qr_sampled.alignment_patterns))) == 0:
+        #     qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=1, border=0, references_features=[
+        #         MatchingFeatures.FINDER_CENTERS,
+        #         MatchingFeatures.FINDER_CORNERS,
+        #         MatchingFeatures.ALIGNMENTS_CENTERS,
+        #         MatchingFeatures.FOURTH_CORNER
+        #     ])
         qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=1, border=0)
 
         return SampledQRCode(
@@ -185,7 +215,7 @@ class QRCode:
             version=qr_sampled.version
         )
 
-    def plot(self, axes=None, interpolation: Optional[str] = None):
+    def plot(self, axes=None, interpolation: Optional[str] = None, show: bool = False):
         finders_centers = np.array([f.center for f in self.finder_patterns])
         aligns_centers = np.array([a.center
                                    for a in self.alignment_patterns
@@ -223,6 +253,9 @@ class QRCode:
             s = ap.hratios[1]
             axes.text(c[1] - s, c[0] + s, str(num + 1), color="red", fontsize="large")
 
+        if show:
+            plt.show()
+
 
 @dataclass
 class SampledQRCode:
@@ -235,14 +268,17 @@ class SampledQRCode:
 
         return len(np.nonzero(mask_2d)[0])
 
-    def plot(self, axes=None) -> None:
+    def plot(self, axes=None, show: bool = False) -> None:
         if axes is None:
             fig = plt.figure()
             axes = fig.add_subplot(1, 1, 1)
 
         axes.imshow(self.image, interpolation=None)
 
-    def plot_differences(self, matrix: np.array, axes=None) -> None:
+        if show:
+            plt.show()
+
+    def plot_differences(self, matrix: np.array, axes=None, show: bool = False) -> None:
         if axes is None:
             fig = plt.figure()
             axes = fig.add_subplot(1, 1, 1)
@@ -262,3 +298,6 @@ class SampledQRCode:
             interpolation="none",
             norm=matplotlib.colors.Normalize(vmin=0, vmax=1),
         )
+
+        if show:
+            plt.show()

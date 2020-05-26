@@ -113,19 +113,22 @@ class AlignmentPattern:
 
 class Features:
 
-    def __init__(self, image: Image,
+    def __init__(self,
+                 image: Image,
+                 bw_image: Image,
                  finder_patterns: List[FinderPattern],
                  alignment_patterns: List[AlignmentPattern]) -> None:
         self.image = image
+        self.bw_image = bw_image
         self.finder_patterns = finder_patterns
         self.alignment_patterns = alignment_patterns
 
     @classmethod
-    def from_image(self, image: Image, **kwargs) -> 'Features':
+    def from_image(cls, image: Image, **kwargs) -> 'Features':
         from .features import find_all_features
         return find_all_features(image, **kwargs)
 
-    def plot(self, axes=None, show=False):
+    def plot(self, axes=None, show: bool = False):
         centroid = np.array([finder.center for finder in self.finder_patterns])
         contours = np.array([finder.contour for finder in self.finder_patterns])
         corns = np.array([finder.corners for finder in self.finder_patterns])

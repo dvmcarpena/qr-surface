@@ -97,9 +97,24 @@ def get_corners_from_contour(contour: Array,
                              shape: Tuple[int, int],
                              num_corners: int,
                              min_distance: int) -> Array:
+
     # TODO optimize to bbox only
-    rimg = np.zeros((shape[0], shape[1]))
-    rr, cc = draw.polygon(contour.T[0], contour.T[1], rimg.shape)
+
+    acontour = contour.astype(int)
+    bbox = np.array([
+        [acontour[:, 0].min(), acontour[:, 1].min()],
+        [acontour[:, 0].max(), acontour[:, 1].max()]
+    ])
+    bbox_rad = max(bbox[1][0] - bbox[0][0], bbox[1][1] - bbox[0][1])
+    bbox[0, :] -= bbox_rad // 10
+    bbox[1, :] += bbox_rad // 10
+    nshape = (bbox[1][0] - bbox[0][0], bbox[1][1] - bbox[0][1])
+    # rimg[bbox[0][0]:bbox[1][0], bbox[0][1]:bbox[1][1]]
+    rimg = np.zeros(nshape)
+    # rimg = np.zeros((shape[0], shape[1]))
+    ncontour = contour - np.array(bbox[0])
+    ncenter = center - np.array(bbox[0])
+    rr, cc = draw.polygon(ncontour.T[0], ncontour.T[1], nshape)
     rimg[rr, cc] = 1
 
     # label_img = measure.label(rimg)
@@ -120,7 +135,11 @@ def get_corners_from_contour(contour: Array,
     # plt.imshow(corners_measure)
     # plt.show()
 
-    kwargs = dict(num_peaks=num_corners, min_distance=min_distance // 3)
+    kwargs = dict(
+        num_peaks=num_corners,
+        min_distance=min_distance // 3,
+        exclude_border=bbox_rad // (10 * 2)
+    )
     corners = feature.peak_local_max(corners_measure, **kwargs)
 
     # import matplotlib.pyplot as plt
@@ -136,21 +155,21 @@ def get_corners_from_contour(contour: Array,
     # plt.show()
 
     for i, c in enumerate(corners):
-        vert = c[0] - center[0] > 1
+        vert = c[0] - ncenter[0] > 1
         if vert:
-            m = (c[1] - center[1]) / (c[0] - center[0])
+            m = (c[1] - ncenter[1]) / (c[0] - ncenter[0])
             n = c[1] - m * c[0]
 
-            if c[0] < center[0]:
+            if c[0] < ncenter[0]:
                 new_x = c[0] - min_distance
             else:
                 new_x = c[0] + min_distance
             new_y = m * new_x + n
         else:
-            m = (c[0] - center[0]) / (c[1] - center[1])
+            m = (c[0] - ncenter[0]) / (c[1] - ncenter[1])
             n = c[0] - m * c[1]
 
-            if c[1] < center[1]:
+            if c[1] < ncenter[1]:
                 new_y = c[1] - min_distance
             else:
                 new_y = c[1] + min_distance
@@ -160,11 +179,16 @@ def get_corners_from_contour(contour: Array,
         index = np.nonzero(vals == 0)[0][0]
         corners[i] = coords[index - 1][::-1]
 
+    corners += np.array(bbox[0])
+
+    # rimg2 = np.zeros((shape[0], shape[1]))
+    # rr, cc = draw.polygon(contour.T[0], contour.T[1], shape)
+    # rimg2[rr, cc] = 1
     # import matplotlib.pyplot as plt
     # plt.figure()
-    # plt.imshow(rimg)
-    # plt.scatter(*coords[vals == 0].T)
-    # plt.scatter(*coords[vals == 1].T)
+    # plt.imshow(rimg2)
+    # # plt.scatter(*coords[vals == 0].T)
+    # # plt.scatter(*coords[vals == 1].T)
     # plt.scatter(*corners[:, ::-1].T)
     # plt.show()
 

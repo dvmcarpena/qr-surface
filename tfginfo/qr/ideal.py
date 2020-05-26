@@ -44,10 +44,13 @@ class IdealQRCode:
             [0, size * self.bitpixel - 1]
         ]) + np.array([self.border, self.border]) * self.bitpixel
         alignments_centers = np.array(get_alignments_centers(self.version))
-        alignments_centers = alignments_centers[np.lexsort((alignments_centers[:, 0],
-                                                            alignments_centers[:, 1]))]
-        self.alignments_centers = self._apply_dimensions(alignments_centers) + np.array([bitpixel / 2]).astype(int)
-        self.fourth_corner = self._apply_dimensions(np.array([size, size]))
+        if len(alignments_centers) > 0:
+            alignments_centers = alignments_centers[np.lexsort((alignments_centers[:, 0],
+                                                                alignments_centers[:, 1]))]
+            self.alignments_centers = self._apply_dimensions(alignments_centers) + np.array([bitpixel / 2]).astype(int)
+        else:
+            self.alignments_centers = np.array(alignments_centers)
+        self.fourth_corner = (np.array([size, size]) + np.array([self.border, self.border])) * self.bitpixel - np.array([1, 1])
 
     def get_references(self, references: References) -> np.ndarray:
         match_features = self._feature_to_points(references)

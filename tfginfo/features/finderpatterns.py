@@ -2,18 +2,12 @@ from enum import auto, Enum, unique
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
-from skimage import color, filters
 
-from tfginfo.utils import Image
 from .ratios import find_general
 from .models import FinderPattern
 
 
-def find_finder_patterns_ratios(image: Image, block_size=151, **kwargs) -> List[FinderPattern]:
-    gray_image: np.ndarray = color.rgb2gray(image)
-    threshold: np.ndarray = filters.threshold_sauvola(gray_image, block_size)
-    bw_image: np.ndarray = gray_image > threshold
-
+def find_finder_patterns_ratios(bw_image: np.ndarray, **kwargs) -> List[FinderPattern]:
     return list(map(
         lambda t: FinderPattern.from_center_and_ratios(
             image=bw_image,
@@ -32,7 +26,7 @@ def find_finder_patterns_ratios(image: Image, block_size=151, **kwargs) -> List[
     ))
 
 
-def find_finder_patterns_areas(image: Image, **kwargs) -> List[FinderPattern]:
+def find_finder_patterns_areas(bw_image: np.ndarray, **kwargs) -> List[FinderPattern]:
     pass
 
 
@@ -49,11 +43,11 @@ _FINDER_PATTERN_METHODS_FUNCS: Dict[FinderPatternMethods, _FinderPatternFinder] 
 }
 
 
-def find_finder_patterns(image: Image,
+def find_finder_patterns(bw_image: np.ndarray,
                          method: Optional[FinderPatternMethods] = None,
                          **kwargs) -> List[FinderPattern]:
     if method is None:
         method = FinderPatternMethods.CLASSIC
 
     func = _FINDER_PATTERN_METHODS_FUNCS[method]
-    return func(image, **kwargs)
+    return func(bw_image, **kwargs)

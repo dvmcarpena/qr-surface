@@ -51,25 +51,49 @@ def check_general_ratio(ratios, widths, strict_border: bool) -> bool:
 
 
 def compute_widths_by_row(row: Array) -> Tuple[List, List]:
-    line_val = []
-    line_rep = []
-    last = None
-    rep = 0
-    for j, first in enumerate(row):
-        if last is None:
-            last = first
-            line_val.append([first, j])
-            line_rep.append(1)
+    # line_val = []
+    # line_rep = []
+    # last = None
+    # rep = 0
+    # for j, first in enumerate(row):
+    #     if last is None:
+    #         last = first
+    #         line_val.append([first, j])
+    #         line_rep.append(1)
+    #     elif last == first:
+    #         line_rep[rep] += 1
+    #     else:
+    #         last = first
+    #         line_val.append([first, j])
+    #         line_rep.append(1)
+    #         rep += 1
 
-        if last == first:
-            line_rep[rep] += 1
-        else:
-            last = first
-            line_val.append([first, j])
-            line_rep.append(1)
-            rep += 1
+    # nline_rep = np.diff(np.where(np.concatenate(([row[0]],
+    #                                              row[:-1] != row[1:],
+    #                                              [True])))[0])[::2]
+    import itertools
+    nline_rep = [sum(1 for _ in group) for key, group in itertools.groupby(row)]
+    if not row[0]:
+        nline_val = np.ones_like(nline_rep)
+        nline_val[::2] = 0.
+    else:
+        nline_val = np.zeros_like(nline_rep)
+        nline_val[::2] = 1.
 
-    return line_val, line_rep
+    nline_val = nline_val.tolist()
+    acc = 0
+    for i, rep in enumerate(nline_rep):
+        nline_val[i] = [bool(nline_val[i]), acc]
+        acc += rep
+
+    # print(row[-30:].tolist())
+    # print(nline_rep)
+    # print(line_rep)
+    # print(nline_val)
+    # print(line_val)
+
+    # return line_val, line_rep
+    return nline_val, nline_rep
 
 
 def cross_check(data, row, iratios, strict_border: bool) -> Optional[int]:
@@ -248,8 +272,12 @@ def find_general(bw_image: Image, iratios, center_color: bool,
     for i, row in filter(lambda x: x[0] % 4 == 0, enumerate(bw_image)):
         line_val, line_rep = compute_widths_by_row(row)
 
+        # fr = border_color == row[0]
+        # print([val == border_color for val, _ in line_val])
+        # print([(i % 2 == 0) == fr for i, _ in enumerate(line_val)])
         it = filter(
             lambda x: x[1][0] == border_color,
+            # lambda x: (x[0] % 2 == 0) == fr,
             enumerate(line_val)
         )
         for k, (_, idx) in it:

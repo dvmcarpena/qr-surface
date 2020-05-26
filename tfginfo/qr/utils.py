@@ -1,13 +1,14 @@
 import itertools
-from typing import Iterator, List, Tuple
+from typing import Iterator, List, Optional, Tuple
 
 import numpy as np
 from scipy.spatial import distance
 from scipy import spatial
 from sklearn import cluster
 
-from tfginfo.utils import Array, get_size_from_version, get_alignments_centers
+from tfginfo.utils import Array, get_size_from_version, get_alignments_centers, Image
 from tfginfo.features import AlignmentPattern, FinderPattern
+from tfginfo.features.corner import corner_scan
 
 OrderedFinderPatterns = Tuple[FinderPattern, FinderPattern, FinderPattern]
 
@@ -262,7 +263,6 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
     ideal_positions = get_alignments_centers(version)
     total_size = get_size_from_version(version)
     ideal_positions = np.array(ideal_positions) / total_size
-    ideal_positions = ideal_positions[np.lexsort((ideal_positions[:, 0], ideal_positions[:, 1]))]
 
     def transf(ap: AlignmentPattern) -> Tuple[AlignmentPattern, Array]:
         # return ap, (mat @ np.array([
@@ -272,78 +272,251 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
         # ])).T[0][:2]
         return ap, _m(ap.center)[0]
 
-    # print(np.array([c for ap, c in map(transf, final_ap)]))
-    # print(ideal_positions)
-    # from scipy import spatial
-    # dists = spatial.distance_matrix(
-    #     np.array([c for ap, c in map(transf, final_ap)]),
-    #     ideal_positions
-    # )
-    # selection = np.argmin(dists, axis=0)
-    # selection2 = np.argmin(dists, axis=1)
-
-    # def transfm1(point):
-    #     # return (np.linalg.inv(mat) @ np.array([
-    #     #     [point[0]],
-    #     #     [point[1]],
-    #     #     [1]
-    #     # ])).T[0][:2]
-    #     return _m.inverse(point)[0]
-
-    # # print(dists)
-    # print(selection)
-    # print(selection2)
-    # # print(np.unique(selection, return_inverse=True, return_counts=True))
-    # if len(np.unique(selection)) < min(get_num_aligns_from_version(version)):
-    #     np.unique(selection, return_counts=True)
-    #
-    # print(np.array([c for ap, c in map(transf, final_ap)]))
-    # print(ideal_positions)
-    # print(final_ap)
-    # ordered_ap = np.array(final_ap)[selection].tolist()
-    # print(ordered_ap)
-
-    # cor1 = transfm1([0, 0])
-    # cor2 = transfm1([1, 0])
-    # cor3 = transfm1([0, 1])
-    # cor4 = transfm1([1, 1])
-
-    # plt.scatter(fourth_corner[1], fourth_corner[0])
-    # plt.scatter([cor1[1], cor2[1], cor3[1], cor4[1]],
-    #             [cor1[0], cor2[0], cor3[0], cor4[0]])
-    # plt.scatter([f1.corners[0][1], f2.corners[1][1], f3.corners[3][1]],
-    #             [f1.corners[0][0], f2.corners[1][0], f3.corners[3][0]])
 
     ordered_ap = []
-    # rad = 1.5 * ideal_positions[0][1]
-    rad = 0.5 * ideal_positions[0][1]
-    for ideal_align in ideal_positions:
-        margins = (
-            (ideal_align[0] - rad, ideal_align[1] - rad),
-            (ideal_align[0] + rad, ideal_align[1] + rad)
-        )
-        # _p1 = transfm1(margins[0])
-        # _p2 = transfm1(margins[1])
-        # i = transfm1(ideal_align)
 
-        # plt.scatter([_p1[1], _p2[1]], [_p1[0], _p2[0]])
-        # plt.scatter(i[1], i[0])
+    if len(ideal_positions) > 0:
+        ideal_positions = ideal_positions[np.lexsort((ideal_positions[:, 0], ideal_positions[:, 1]))]
 
-        candidates = [
-            (ap, c)
-            for ap, c in map(transf, final_ap)
-            if margins[0][0] < c[0] < margins[1][0] and margins[0][1] < c[1] < margins[1][1]
-        ]
+        # print(np.array([c for ap, c in map(transf, final_ap)]))
+        # print(ideal_positions)
+        # from scipy import spatial
+        # dists = spatial.distance_matrix(
+        #     np.array([c for ap, c in map(transf, final_ap)]),
+        #     ideal_positions
+        # )
+        # selection = np.argmin(dists, axis=0)
+        # selection2 = np.argmin(dists, axis=1)
 
-        if len(candidates) == 0:
-            ordered_ap.append(None)
-        elif len(candidates) == 1:
-            ordered_ap.append(candidates[0][0])
-        else:
-            index = int(np.argmin([distance.euclidean(ideal_align, cand[1]) for cand in candidates]))
-            ordered_ap.append(candidates[index][0])
+        # def transfm1(point):
+        #     # return (np.linalg.inv(mat) @ np.array([
+        #     #     [point[0]],
+        #     #     [point[1]],
+        #     #     [1]
+        #     # ])).T[0][:2]
+        #     return _m.inverse(point)[0]
+
+        # # print(dists)
+        # print(selection)
+        # print(selection2)
+        # # print(np.unique(selection, return_inverse=True, return_counts=True))
+        # if len(np.unique(selection)) < min(get_num_aligns_from_version(version)):
+        #     np.unique(selection, return_counts=True)
+        #
+        # print(np.array([c for ap, c in map(transf, final_ap)]))
+        # print(ideal_positions)
+        # print(final_ap)
+        # ordered_ap = np.array(final_ap)[selection].tolist()
+        # print(ordered_ap)
+
+        # cor1 = transfm1([0, 0])
+        # cor2 = transfm1([1, 0])
+        # cor3 = transfm1([0, 1])
+        # cor4 = transfm1([1, 1])
+
+        # plt.scatter(fourth_corner[1], fourth_corner[0])
+        # plt.scatter([cor1[1], cor2[1], cor3[1], cor4[1]],
+        #             [cor1[0], cor2[0], cor3[0], cor4[0]])
+        # plt.scatter([f1.corners[0][1], f2.corners[1][1], f3.corners[3][1]],
+        #             [f1.corners[0][0], f2.corners[1][0], f3.corners[3][0]])
+
+        # rad = 1.5 * ideal_positions[0][1]
+        rad = 0.5 * ideal_positions[0][1]
+        for ideal_align in ideal_positions:
+            margins = (
+                (ideal_align[0] - rad, ideal_align[1] - rad),
+                (ideal_align[0] + rad, ideal_align[1] + rad)
+            )
+            # _p1 = transfm1(margins[0])
+            # _p2 = transfm1(margins[1])
+            # i = transfm1(ideal_align)
+
+            # plt.scatter([_p1[1], _p2[1]], [_p1[0], _p2[0]])
+            # plt.scatter(i[1], i[0])
+
+            candidates = [
+                (ap, c)
+                for ap, c in map(transf, final_ap)
+                if margins[0][0] < c[0] < margins[1][0] and margins[0][1] < c[1] < margins[1][1]
+            ]
+
+            if len(candidates) == 0:
+                ordered_ap.append(None)
+            elif len(candidates) == 1:
+                ordered_ap.append(candidates[0][0])
+            else:
+                index = int(np.argmin([distance.euclidean(ideal_align, cand[1]) for cand in candidates]))
+                ordered_ap.append(candidates[index][0])
 
     return ordered_ap
+
+
+def find_fourth_corner(bw_image: Image,
+                       finder_patterns: OrderedFinderPatterns,
+                       version: int,
+                       alignment_patterns: List[AlignmentPattern]) -> Optional[np.ndarray]:
+    final_ap = []
+
+    f1, f2, f3 = finder_patterns
+    # v1 = f2.center - f1.center
+    # v2 = f3.center - f1.center
+    v1 = f2.corners[1] - f1.corners[0]
+    v2 = f3.corners[3] - f1.corners[0]
+    det = v1[0] * v2[1] - v1[1] * v2[0]
+    mat = np.array([
+        [v2[1] / det, - v2[0] / det, 0],
+        [- v1[1] / det, v1[0] / det, 0],
+        [0, 0, 1]
+    ]) @ np.array([
+        # [1, 0, - f1.center[0]],
+        # [0, 1, - f1.center[1]],
+        [1, 0, - f1.corners[0][0]],
+        [0, 1, - f1.corners[0][1]],
+        [0, 0, 1]
+    ])
+    from skimage import transform
+
+    eps = 1e-4
+
+    x11 = f2.corners[1][0]
+    y11 = f2.corners[1][1]
+    x12 = f2.corners[2][0]
+    y12 = f2.corners[2][1]
+
+    # a1 = (y11 - y12) / (x11 - x12)
+    # b1 = y11 - a1 * x11
+    if abs(x11 - x12) <= eps:
+        a1 = 1
+        b1 = 0
+    else:
+        a1 = - (y11 - y12) / (x11 - x12)
+        b1 = 1
+    c1 = a1 * x11 + b1 * y11
+
+    x21 = f3.corners[3][0]
+    y21 = f3.corners[3][1]
+    x22 = f3.corners[2][0]
+    y22 = f3.corners[2][1]
+
+    # a2 = (y21 - y22) / (x21 - x22)
+    # b2 = y21 - a2 * x21
+    if abs(x21 - x22) <= eps:
+        a2 = 1
+        b2 = 0
+    else:
+        a2 = - (y21 - y22) / (x21 - x22)
+        b2 = 1
+    c2 = a2 * x21 + b2 * y21
+
+    # x = (b2 - b1) / (a1 - a2)
+    # y = a1 * x + b1
+    fourth_corner = np.linalg.solve(np.array([[a1, b1], [a2, b2]]), np.array([c1, c2]))
+
+    _src = np.array([
+        f1.corners[0].tolist(),
+        f2.corners[1].tolist(),
+        f3.corners[3].tolist(),
+        fourth_corner.tolist()
+    ])
+    _dst = np.array([
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+    ])
+
+    _m = transform.ProjectiveTransform()
+    _m.estimate(_src, _dst)
+
+    # limits_qr = (-0.25, 1.25)
+    # limits_qr = (-0.1, 1.1)
+    limits_qr = (0, 1)
+    for ap in alignment_patterns:
+        # new_ap = (mat @ np.array([
+        #     [ap.center[0]],
+        #     [ap.center[1]],
+        #     [1]
+        # ])).T[0]
+        new_ap = _m(ap.center)[0]
+
+        if limits_qr[0] < new_ap[0] < limits_qr[1] and limits_qr[0] < new_ap[1] < limits_qr[1]:
+            final_ap.append(ap)
+
+    # if len(final_ap) != get_num_aligns_from_version(version):
+    #     warnings.warn(f"Found {len(final_ap)} alignment patterns, but with the "
+    #                   f"estimed version {version} it should have "
+    #                   f"{get_num_aligns_from_version(version)}.")
+
+    ideal_positions = get_alignments_centers(version)
+    total_size = get_size_from_version(version)
+    ideal_positions = np.array(ideal_positions) / total_size
+
+    if len(ideal_positions) > 0:
+        ideal_positions = ideal_positions[np.lexsort((ideal_positions[:, 0], ideal_positions[:, 1]))]
+
+        ideal_align = ideal_positions[-1]
+    else:
+        ideal_align = _m(f1.corners[2])[0]
+
+    sides = 1.2 * (np.array([1, 1]) - ideal_align)
+    # image[ideal_align[1]:ideal_align[1] + sides[1], ideal_align[0]:ideal_align[0] + sides[0]]
+
+    src = np.array([
+        _m.inverse(ideal_align)[0].tolist(),
+        _m.inverse(ideal_align + np.array([sides[0], 0]))[0].tolist(),
+        _m.inverse(ideal_align + np.array([0, sides[1]]))[0].tolist(),
+        _m.inverse(ideal_align + sides[1])[0].tolist()
+    ])
+    dst = np.array([
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+    ]) * 200
+
+    tr = transform.estimate_transform(
+        ttype="projective",
+        src=src[:, ::-1],
+        dst=dst
+    )
+    bw_trimmed = transform.warp(
+        image=bw_image,
+        inverse_map=tr.inverse,
+        output_shape=(200, 200),
+        order=0,
+        mode="edge"
+    )
+    # import matplotlib.pyplot as plt
+    # plt.figure()
+    # plt.imshow(bw_trimmed)
+    # plt.show()
+
+    # gray_image: np.ndarray = color.rgb2gray(trimmed)
+    # threshold: np.ndarray = filters.threshold_sauvola(gray_image, 151)
+    # bw_image: np.ndarray = gray_image > threshold
+    fourth_corner = corner_scan(
+        bw_trimmed,
+        2,
+        corner_radius=0,
+        fuzzy_radius=1,
+        blank_radius=1
+    )
+
+    # import matplotlib.pyplot as plt
+    # plt.figure()
+    # plt.figure()
+    # plt.imshow(bw_image)
+    # plt.scatter(*fourth_corner.T)
+    # plt.figure()
+    # plt.imshow(image)
+    # plt.scatter(*(tr.inverse(fourth_corner)[0]).T)
+    # plt.scatter(*(_m.inverse(ideal_align)[0])[::-1].T)
+    # plt.scatter(*(_m.inverse(ideal_align + np.array([sides[0], 0]))[0])[::-1].T)
+    # plt.scatter(*(_m.inverse(ideal_align + np.array([0, sides[1]]))[0])[::-1].T)
+    # plt.scatter(*(_m.inverse(ideal_align + sides[1])[0])[::-1].T)
+    # plt.show()
+
+    return tr.inverse(fourth_corner)[0][::-1] if fourth_corner is not None else None
 
 
 def guess_version(version_points: Array) -> int:

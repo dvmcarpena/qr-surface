@@ -195,7 +195,7 @@ _CORRECTION_METHOD_FUNC = {
         default_references_features=[
             MatchingFeatures.FINDER_CENTERS,
             MatchingFeatures.ALIGNMENTS_CENTERS,
-            MatchingFeatures.FOURTH_CORNER
+            # MatchingFeatures.FOURTH_CORNER
         ]
     ),
     Correction.CYLINDRICAL: general_correction(

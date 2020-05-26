@@ -2,18 +2,13 @@ from enum import auto, Enum, unique
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
-from skimage import color, filters
 
 from tfginfo.utils import Image
 from .ratios import find_general
 from .models import AlignmentPattern
 
 
-def find_alignment_patterns_ratios(image: Image, block_size=151, **kwargs) -> List[AlignmentPattern]:
-    gray_image: np.ndarray = color.rgb2gray(image)
-    threshold: np.ndarray = filters.threshold_sauvola(gray_image, block_size)
-    bw_image: np.ndarray = gray_image > threshold
-
+def find_alignment_patterns_ratios(bw_image: np.ndarray, **kwargs) -> List[AlignmentPattern]:
     return list(map(
         lambda t: AlignmentPattern.from_center_and_ratios(
                 image=bw_image,
@@ -32,7 +27,7 @@ def find_alignment_patterns_ratios(image: Image, block_size=151, **kwargs) -> Li
     ))
 
 
-def find_alignment_patterns_areas(image: Image, **kwargs) -> List[AlignmentPattern]:
+def find_alignment_patterns_areas(bw_image: np.ndarray, **kwargs) -> List[AlignmentPattern]:
     pass
 
 
@@ -49,11 +44,11 @@ _FINDER_PATTERN_METHODS_FUNCS: Dict[AlignmentPatternMethods, _AlignmentPatternFi
 }
 
 
-def find_alignment_patterns(image: Image,
+def find_alignment_patterns(bw_image: np.ndarray,
                             method: Optional[AlignmentPatternMethods] = None,
                             **kwargs) -> List[AlignmentPattern]:
     if method is None:
         method = AlignmentPatternMethods.CLASSIC
 
     func = _FINDER_PATTERN_METHODS_FUNCS[method]
-    return func(image, **kwargs)
+    return func(bw_image, **kwargs)

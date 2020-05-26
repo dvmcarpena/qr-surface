@@ -43,6 +43,7 @@ def apply_linear_transformation(qr: QRCode, linear_map, ideal_qr: IdealQRCode) -
     ]
     if qr.fourth_corner is not None:
         qr.fourth_corner = ideal_qr.fourth_corner
+        # qr.fourth_corner = linear_map(qr.fourth_corner[::-1])[0][::-1]
 
     return qr
 
@@ -98,6 +99,8 @@ def general_correction(is_lineal: bool, build_transformation_function: Callable,
 
         src = qr.get_references(references)
         dst = ideal_qr.get_references(references)
+        # print(qr.version)
+        # print(dst)
 
         if is_lineal:
             linear_map = build_transformation_function(src, dst)
