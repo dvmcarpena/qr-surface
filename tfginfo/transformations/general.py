@@ -48,7 +48,7 @@ def apply_linear_transformation(qr: QRCode, linear_map, ideal_qr: IdealQRCode) -
     return qr
 
 
-def apply_nonlinear_transformation(qr: QRCode, inverse_map, ideal_qr: IdealQRCode) -> QRCode:
+def apply_nonlinear_transformation(qr: QRCode, inverse_map, ideal_qr: IdealQRCode, simple: bool) -> QRCode:
     qr.image = img_as_ubyte(transform.warp(
         image=qr.image,
         inverse_map=inverse_map,
@@ -57,28 +57,76 @@ def apply_nonlinear_transformation(qr: QRCode, inverse_map, ideal_qr: IdealQRCod
         mode="edge"
     ))
 
-    bw_image = rgb2binary(qr.image)
+    if simple:
+        qr.finder_patterns = tuple([
+            FinderPattern(
+                center=center,
+                corners=corners,
+                contour=corners,
+                hratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel,
+                vratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel
+            )
+            for center, corners in zip(ideal_qr.finders_centers, ideal_qr.finders_corners_by_finder)
+        ])
+        qr.alignment_patterns = [
+            AlignmentPattern(
+                center=center,
+                corners=None,
+                contour=None,
+                hratios=np.array([1, 1, 1]) * ideal_qr.bitpixel,
+                vratios=np.array([1, 1, 1]) * ideal_qr.bitpixel
+            )
+            for center in ideal_qr.alignments_centers
+        ]
+        if qr.fourth_corner is not None:
+            qr.fourth_corner = ideal_qr.fourth_corner
+    else:
+        bw_image = rgb2binary(qr.image)
 
-    qr.finder_patterns = tuple([
-        FinderPattern.from_center_and_ratios(
-            image=bw_image,
-            center=dst_center[::-1],
-            hratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel,
-            vratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel
-        )
-        for f, dst_center in zip(qr.finder_patterns, ideal_qr.finders_centers)
-    ])
-    qr.alignment_patterns = [
-        AlignmentPattern.from_center_and_ratios(
-            image=bw_image,
-            center=dst_center[::-1],
-            hratios=np.array([1, 1, 1]) * ideal_qr.bitpixel,
-            vratios=np.array([1, 1, 1]) * ideal_qr.bitpixel
-        ) if a is not None else None
-        for a, dst_center in zip(qr.alignment_patterns, ideal_qr.alignments_centers)
-    ]
-    if qr.fourth_corner is not None:
-        qr.fourth_corner = ideal_qr.fourth_corner
+        try:
+            qr.finder_patterns = tuple([
+                FinderPattern.from_center_and_ratios(
+                    image=bw_image,
+                    center=dst_center[::-1],
+                    hratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel,
+                    vratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel
+                )
+                for f, dst_center in zip(qr.finder_patterns, ideal_qr.finders_centers)
+            ])
+        except ValueError:
+            qr.finder_patterns = tuple([
+                FinderPattern(
+                    center=center,
+                    corners=corners,
+                    contour=corners,
+                    hratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel,
+                    vratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel
+                )
+                for center, corners in zip(ideal_qr.finders_centers, ideal_qr.finders_corners_by_finder)
+            ])
+        qr.alignment_patterns = [
+            AlignmentPattern.from_center_and_ratios(
+                image=bw_image,
+                center=dst_center[::-1],
+                hratios=np.array([1, 1, 1]) * ideal_qr.bitpixel,
+                vratios=np.array([1, 1, 1]) * ideal_qr.bitpixel
+            ) if a is not None else None
+            for a, dst_center in zip(qr.alignment_patterns, ideal_qr.alignments_centers)
+        ]
+        if qr.fourth_corner is not None:
+            qr.fourth_corner = ideal_qr.fourth_corner
+
+        if any([len(finder.corners) != 4 for finder in qr.finder_patterns]):
+            qr.finder_patterns = tuple([
+                FinderPattern(
+                    center=center,
+                    corners=corners,
+                    contour=corners,
+                    hratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel,
+                    vratios=np.array([1, 1, 3, 1, 1]) * ideal_qr.bitpixel
+                )
+                for center, corners in zip(ideal_qr.finders_centers, ideal_qr.finders_corners_by_finder)
+            ])
 
     return qr
 
@@ -88,7 +136,8 @@ def general_correction(is_lineal: bool, build_transformation_function: Callable,
 
     @wraps(build_transformation_function)
     def instance_correction(qr: QRCode, bitpixel: int, border: int,
-                            references_features: Optional[List[MatchingFeatures]] = None) -> QRCode:
+                            references_features: Optional[List[MatchingFeatures]] = None,
+                            simple: bool = False) -> QRCode:
         if bitpixel % 2 == 0:
             raise ValueError("Bitpixel needs to be a odd number")
         if references_features is None:
@@ -110,11 +159,12 @@ def general_correction(is_lineal: bool, build_transformation_function: Callable,
                 ideal_qr=ideal_qr
             )
         else:
-            inverse_map = build_transformation_function(qr, src, dst, ideal_qr.size)
+            inverse_map = build_transformation_function(qr, src, dst, ideal_qr)
             return apply_nonlinear_transformation(
                 qr=qr,
                 inverse_map=inverse_map,
-                ideal_qr=ideal_qr
+                ideal_qr=ideal_qr,
+                simple=simple
             )
 
     return instance_correction

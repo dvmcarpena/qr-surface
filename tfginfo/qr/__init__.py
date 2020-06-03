@@ -1,14 +1,14 @@
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import auto, Enum, unique
 from typing import Dict, Iterator, List, Optional, Tuple
 
 import matplotlib.colors
 from matplotlib import pyplot as plt
 import numpy as np
-from skimage import img_as_ubyte, color
+from skimage import color, filters, img_as_ubyte, transform
 
-from tfginfo.utils import Array, Image, create_bounding_box
+from tfginfo.utils import Array, Image, create_bounding_box, get_size_from_version, get_alignments_centers
 from tfginfo.features import AlignmentPattern, Features, FinderPattern
 from tfginfo.decode import decode
 from tfginfo.matching import MatchingFeatures, References
@@ -33,6 +33,10 @@ class QRCode:
     version: int
     alignment_patterns: List[Optional[AlignmentPattern]]
     fourth_corner: Optional[Array]
+    size: int = field(init=False)
+
+    def __post_init__(self):
+        self.size = get_size_from_version(self.version)
 
     @classmethod
     def from_image(cls, image: Image, **kwargs) -> Iterator['QRCode']:
@@ -197,9 +201,8 @@ class QRCode:
 
         return results[0]
 
-    def sample(self):
+    def sample(self, method=Correction.PROJECTIVE):
         qr_sampled = copy.deepcopy(self)
-        qr_sampled.binarize()
 
         # if len(list(filter(lambda a: a is not None, qr_sampled.alignment_patterns))) == 0:
         #     qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=1, border=0, references_features=[
@@ -208,7 +211,33 @@ class QRCode:
         #         MatchingFeatures.ALIGNMENTS_CENTERS,
         #         MatchingFeatures.FOURTH_CORNER
         #     ])
-        qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=1, border=0)
+        # if method == Correction.TPS:
+        #     qr_sampled.correct(method=method, bitpixel=5, border=0, simple=True)
+        #     qr_sampled.binarize()
+        #     size = get_size_from_version(qr_sampled.version)
+        #     qr_sampled.image = img_as_ubyte(transform.resize(qr_sampled.image, (size, size), order=0, anti_aliasing=False))
+        #
+        #     # gray_image = color.rgb2gray(qr_sampled.image)
+        #     # threshold = filters.threshold_otsu(gray_image)
+        #     # qr_sampled.image = img_as_ubyte(color.gray2rgb(gray_image > threshold))
+        #     # plt.figure()
+        #     # plt.imshow(qr_sampled.image)
+        #     # plt.show()
+        # else:
+        #     qr_sampled.binarize()
+        #     qr_sampled.correct(method=method, bitpixel=1, border=0)
+        # qr_sampled.correct(method=method, bitpixel=5, border=10)
+        # qr_sampled.binarize()
+        # qr_sampled.correct(method=method, bitpixel=1, border=0, simple=True)
+
+        qr_sampled.correct(method=method, bitpixel=5, border=0, simple=True)
+        qr_sampled.binarize()
+        qr_sampled.image = img_as_ubyte(transform.resize(
+            image=qr_sampled.image,
+            output_shape=(qr_sampled.size, qr_sampled.size),
+            order=0,
+            anti_aliasing=False
+        ))
 
         return SampledQRCode(
             image=qr_sampled.image,
@@ -301,3 +330,88 @@ class SampledQRCode:
 
         if show:
             plt.show()
+
+    def decode(self):
+        image = color.rgb2gray(self.image)
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # plt.imshow(image)
+
+        # size = image.shape[0]
+        # new_image2 = [None] * size
+        #
+        # for row in range(size):
+        #     new_image2[row] = [None] * size
+        #     for col in range(size):
+        #         new_image2[row][col] = False
+
+        self._paint_timing_pattern(image, image.shape[0])
+        self._paint_alignment_pattern(image, image.shape[0])
+        self._paint_postion_pattern(image, image.shape[0])
+        # plt.figure()
+        # plt.imshow(image)
+        # plt.show()
+
+        frame_width = 4
+        new_size = (image.shape[0] + 2 * frame_width, image.shape[1] + 2 * frame_width, 3)
+        new_image = np.ones(new_size, np.uint8) * 255
+
+        new_image[frame_width:image.shape[0] + frame_width,
+                  frame_width:image.shape[1] + frame_width, :] = img_as_ubyte(color.gray2rgb(image))
+        new_image = img_as_ubyte(transform.rescale(
+            image=new_image,
+            scale=5,
+            order=0,
+            anti_aliasing=False,
+            multichannel=True
+        ))
+
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # plt.imshow(new_image)
+        # plt.show()
+
+        results = decode(new_image)
+
+        assert len(results) > 0
+        if len(results) > 1:
+            raise ValueError("More than one QR found in the bbox of the QR")
+
+        return results[0]
+
+    def _paint_postion_pattern(self, image, size):
+        for row, col in [(0, 0), (size - 7, 0), (0, size - 7)]:
+            for r in range(-1, 8):
+                if row + r <= -1 or size <= row + r:
+                    continue
+
+                for c in range(-1, 8):
+
+                    if col + c <= -1 or size <= col + c:
+                        continue
+
+                    if (0 <= r and r <= 6 and (c == 0 or c == 6)
+                            or (0 <= c and c <= 6 and (r == 0 or r == 6))
+                            or (2 <= r and r <= 4 and 2 <= c and c <= 4)):
+                        image[row + r][col + c] = 0
+                    else:
+                        image[row + r][col + c] = 1
+
+    def _paint_alignment_pattern(self, image, size):
+        pos = get_alignments_centers(self.version)
+
+        for i in range(len(pos)):
+            row, col = pos[i]
+
+            for r in range(-2, 3):
+                for c in range(-2, 3):
+                    if (r == -2 or r == 2 or c == -2 or c == 2 or
+                            (r == 0 and c == 0)):
+                        image[row + r][col + c] = 0
+                    else:
+                        image[row + r][col + c] = 1
+
+    def _paint_timing_pattern(self, image, size):
+        for r in range(8, size - 8):
+            image[r][6] = r % 2
+            image[6][r] = r % 2

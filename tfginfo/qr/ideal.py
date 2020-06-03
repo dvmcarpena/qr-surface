@@ -43,6 +43,11 @@ class IdealQRCode:
             [7 * self.bitpixel - 1, size * self.bitpixel - 1],
             [0, size * self.bitpixel - 1]
         ]) + np.array([self.border, self.border]) * self.bitpixel
+        self.finders_corners_by_finder = [
+            self.finders_corners[0:4],
+            self.finders_corners[4:8],
+            self.finders_corners[8:]
+        ]
         alignments_centers = np.array(get_alignments_centers(self.version))
         if len(alignments_centers) > 0:
             alignments_centers = alignments_centers[np.lexsort((alignments_centers[:, 0],

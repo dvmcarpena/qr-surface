@@ -31,10 +31,17 @@ if __name__ == "__main__":
         return (
             # labeled_image.dataset == "bluephage"
             # labeled_image.dataset == "colorsensing"
-            # labeled_image.dataset == "colorsensing2"
-            labeled_image.dataset == "synthetic_small"
+            labeled_image.dataset == "colorsensing2"
+            # labeled_image.dataset == "synthetic_small"
             # and labeled_image.version == 7
             # and labeled_image.num_qrs > 1
+            and labeled_image.localization_error is None
+            # and any(
+            #     items == QRErrorId.WRONG_PIXELS
+            #     for qr in labeled_image.qrs
+            #     if qr.correction_error is not None
+            #     for items in qr.correction_error.values()
+            # )
             # and all(
             #     qr.deformation == Deformation.PERSPECTIVE or qr.deformation == Deformation.AFFINE
             #     for qr in labeled_image.qrs
@@ -56,9 +63,9 @@ if __name__ == "__main__":
 
     corrections = [
         # Correction.AFFINE,
-        Correction.PROJECTIVE,
-        # Correction.CYLINDRICAL,
-        Correction.TPS
+        # Correction.PROJECTIVE,
+        Correction.CYLINDRICAL,
+        # Correction.TPS
     ]
 
     # with tqdm(total=len(target_images), ncols=150) as progress_bar:
