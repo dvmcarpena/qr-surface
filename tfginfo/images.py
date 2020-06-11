@@ -58,6 +58,8 @@ class LabeledImage:
     image_id: str
     num_qrs: int
     localization_error: Optional[QRErrorId]
+    zbar: Optional[bool]
+    zbar_error: Optional[QRErrorId]
     qrs: List[LabeledQRCode]
     # deformation: str
     # correction_error: Optional[Dict[Correction, Optional[QRErrorId]]]
@@ -90,6 +92,15 @@ class LabeledImage:
             localization_error = QRErrorId.__members__[localization_error_input]
         else:
             localization_error = None
+
+        zbar = image_data.get("zbar", None)
+
+        zbar_error_input: Optional[str] = image_data.get("zbar_error", None)
+        zbar_error: Optional[QRErrorId]
+        if zbar_error_input is not None:
+            zbar_error = QRErrorId.__members__[zbar_error_input]
+        else:
+            zbar_error = None
 
         qrs = []
         for qr_data in qrs_datas:
@@ -148,6 +159,8 @@ class LabeledImage:
             data=bitmap_data.get("data", None),
             num_qrs=num_qrs,
             localization_error=localization_error,
+            zbar=zbar,
+            zbar_error=zbar_error,
             qrs=qrs,
             # deformation=Deformation.__members__[image_data["deformation"].upper()],
             # localization_error=localization_error,
@@ -171,7 +184,7 @@ class LabeledImage:
     def save_raw_data(self, data: Dict) -> None:
         self.data_path.write_text(json.dumps(data))
 
-    def update_localization_error(self, localization_error: QRErrorId, update: bool = False):
+    def update_localization_error(self, localization_error: QRErrorId, diff: Optional[Dict], update: bool = False):
         source = None
         if self.localization_error is None:
             # if self.qrs is not None:
@@ -195,6 +208,17 @@ class LabeledImage:
                     if "bad_modules" in qr.keys():
                         qr.pop("bad_modules")
                 self.save_raw_data(data)
+
+            if diff is not None:
+                from_key = str(self.localization_error)
+                if from_key not in diff["localization_error"].keys():
+                    diff["localization_error"][from_key] = {}
+
+                to_key = localization_error.name
+                if to_key not in diff["localization_error"][from_key].keys():
+                    diff["localization_error"][from_key][to_key] = 0
+
+                diff["localization_error"][from_key][to_key] += 1
 
         return changes
 
@@ -220,22 +244,17 @@ class LabeledImage:
             data.pop("bad_modules")
         self.save_raw_data(data)
 
-    def update_successfull_correction(self, correction: Correction, qr_index: int, bad_modules: BadModules, update: bool = False) -> bool:
-        return self._update_correction(correction, qr_index, bad_modules, None, update=update)
-
-    # def update_successfull_correction(self, correction: Correction, bad_modules: BadModules, update: bool = False) -> bool:
-    #     return self._update_correction(correction, bad_modules, None, update=update)
+    def update_successfull_correction(self, correction: Correction, qr_index: int, bad_modules: BadModules,
+                                      diff: Optional[Dict], update: bool = False) -> bool:
+        return self._update_correction(correction, qr_index, bad_modules, None, diff, update=update)
 
     def update_correction_error(self, correction: Correction, qr_index: int, bad_modules: BadModules,
-                                correction_error: Optional[QRErrorId], update: bool = False) -> bool:
-        return self._update_correction(correction, qr_index, bad_modules, correction_error, update=update)
-
-    # def update_correction_error(self, correction: Correction, bad_modules: BadModules,
-    #                             correction_error: Optional[QRErrorId], update: bool = False) -> bool:
-    #     return self._update_correction(correction, bad_modules, correction_error, update=update)
+                                correction_error: Optional[QRErrorId], diff: Optional[Dict],
+                                update: bool = False) -> bool:
+        return self._update_correction(correction, qr_index, bad_modules, correction_error, diff, update=update)
 
     def _update_correction(self, correction: Correction, qr_index: int, bad_modules: BadModules,
-                           correction_error: Optional[QRErrorId], update: bool) -> bool:
+                           correction_error: Optional[QRErrorId], diff: Optional[Dict], update: bool) -> bool:
         source_correction = None
         if self.localization_error is not None:
             source_correction = self.localization_error.name
@@ -277,8 +296,37 @@ class LabeledImage:
 
         if changes_correction:
             print(f"Correction error from {correction.name} with QR number {qr_index}: {source_correction} -> {dest_correction}")
+
+            if diff is not None:
+                diff_key = "correction_error"
+
+                from_key = f"{source_correction}"
+                if from_key not in diff[diff_key][correction.name].keys():
+                    diff[diff_key][correction.name][from_key] = {}
+
+                to_key = f"{dest_correction}"
+                if to_key not in diff[diff_key][correction.name][from_key].keys():
+                    diff[diff_key][correction.name][from_key][to_key] = 0
+
+                diff[diff_key][correction.name][from_key][to_key] += 1
         if changes_bad_mod:
             print(f"Bad modules from {correction.name} with QR number {qr_index}: {source_bad_mod} -> {bad_modules}")
+
+            if diff is not None:
+                diff_key = "bad_modules"
+
+                if source_bad_mod is None:
+                    val_key = True
+                elif bad_modules is None:
+                    val_key = False
+                else:
+                    val_key = source_bad_mod.count > bad_modules.count
+
+                val_key = "Better" if val_key else "Worse"
+                if val_key not in diff[diff_key][correction.name].keys():
+                    diff[diff_key][correction.name][val_key] = 0
+
+                diff[diff_key][correction.name][val_key] += 1
 
         if (changes_correction or changes_bad_mod) and update:
             data = self.load_raw_data()
@@ -304,72 +352,38 @@ class LabeledImage:
 
         return changes_correction or changes_bad_mod
 
-    # def _update_correction(self, correction: Correction, bad_modules: BadModules, correction_error: Optional[QRErrorId],
-    #                        update: bool) -> bool:
-    #     source_correction = None
-    #     if self.localization_error is not None:
-    #         source_correction = self.localization_error.name
-    #     if correction_error is None:
-    #         dest_correction = "GOOD"
-    #     else:
-    #         dest_correction = correction_error.name
-    #     if self.correction_error is None:
-    #         changes_correction = True
-    #     elif correction not in self.correction_error.keys():
-    #         changes_correction = True
-    #     elif self.correction_error[correction] != correction_error:
-    #         if self.correction_error[correction] is None:
-    #             source_correction = "GOOD"
-    #         else:
-    #             source_correction = self.correction_error[correction].name
-    #
-    #         changes_correction = True
-    #     else:
-    #         changes_correction = False
-    #
-    #     source_bad_mod = None
-    #     if self.bad_modules is None:
-    #         if bad_modules is None:
-    #             changes_bad_mod = False
-    #         else:
-    #             changes_bad_mod = True
-    #     elif correction not in self.bad_modules.keys():
-    #         changes_bad_mod = True
-    #     elif (self.bad_modules[correction].count != bad_modules.count
-    #           or self.bad_modules[correction].relative != bad_modules.relative):
-    #         source_bad_mod = self.bad_modules[correction]
-    #         changes_bad_mod = True
-    #     else:
-    #         changes_bad_mod = False
-    #
-    #     if changes_correction or changes_bad_mod:
-    #         print()
-    #
-    #     if changes_correction:
-    #         print(f"Correction error from {correction.name}: {source_correction} -> {dest_correction}")
-    #     if changes_bad_mod:
-    #         print(f"Bad modules from {correction.name}: {source_bad_mod} -> {bad_modules}")
-    #
-    #     if (changes_correction or changes_bad_mod) and update:
-    #         data = self.load_raw_data()
-    #         if changes_correction:
-    #             data["localization_error"] = None
-    #             if "correction_error" not in data.keys():
-    #                 data["correction_error"] = {}
-    #             data["correction_error"][correction.name] = None if correction_error is None else correction_error.name
-    #         if changes_bad_mod:
-    #             if bad_modules is None:
-    #                 data.pop("bad_modules")
-    #             else:
-    #                 if "bad_modules" not in data.keys():
-    #                     data["bad_modules"] = {}
-    #                 data["bad_modules"][correction.name] = {
-    #                     "count": bad_modules.count,
-    #                     "relative": bad_modules.relative
-    #                 }
-    #         self.save_raw_data(data)
-    #
-    #     return changes_correction or changes_bad_mod
+    def update_zbar(self, zbar: bool, zbar_err: Optional[QRErrorId], diff: Optional[Dict], update: bool = False):
+        if self.zbar is None:
+            changes = True
+        elif self.zbar != zbar:
+            changes = True
+        elif self.zbar_error != zbar_err:
+            changes = True
+        else:
+            changes = False
+
+        if changes:
+            print()
+            print(f"Zbar error: {self.zbar} {self.zbar_error} -> {zbar} {zbar_err}")
+
+            if update:
+                data = self.load_raw_data()
+                data["zbar"] = zbar
+                if zbar:
+                    data["zbar_error"] = None if zbar_err is None else zbar_err.name
+                self.save_raw_data(data)
+
+            if diff is not None:
+                diff_key = "zbar_err"
+                from_key = f"{self.zbar} {self.zbar_error}"
+                if from_key not in diff[diff_key].keys():
+                    diff[diff_key][from_key] = {}
+
+                to_key = f"{zbar} {zbar_err}"
+                if to_key not in diff[diff_key][from_key].keys():
+                    diff[diff_key][from_key][to_key] = 0
+
+                diff[diff_key][from_key][to_key] += 1
 
 
 def read_original_matrix(original_path: Path) -> np.ndarray:

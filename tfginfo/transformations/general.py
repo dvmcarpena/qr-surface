@@ -17,7 +17,7 @@ def apply_linear_transformation(qr: QRCode, linear_map, ideal_qr: IdealQRCode) -
         image=qr.image,
         inverse_map=linear_map.inverse,
         output_shape=(ideal_qr.size, ideal_qr.size),
-        order=0,
+        order=3,
         mode="edge"
     ))
 

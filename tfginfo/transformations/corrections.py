@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import numpy as np
 from skimage import transform
@@ -9,7 +9,7 @@ from tfginfo.matching import MatchingFeatures
 
 from .interpolate import RadialBasisSplines
 from .general import general_correction
-from .geometry import LSqEllipse, project_to_cylinder
+from .geometry import project_to_cylinder
 
 Transformation = Callable[..., QRCode]
 
@@ -35,35 +35,6 @@ def projective_correction(src: np.ndarray, dst: np.ndarray):
     )
 
 
-# def collinear(p0, p1, p2):
-#     x1, y1 = p1[0] - p0[0], p1[1] - p0[1]
-#     x2, y2 = p2[0] - p0[0], p2[1] - p0[1]
-#     print(abs(x1 * y2 - x2 * y1))
-#     print(min([np.sqrt(x1**2 + y1**2), np.sqrt(x2**2 + y2**2)]) / 2)
-#     return abs(x1 * y2 - x2 * y1) < min([np.sqrt(x1**2 + y1**2), np.sqrt(x2**2 + y2**2)]) / 2
-
-# def collinear(p0, p1, p2):
-#     '''Accepts [(x1, y1), (x2, y2), ...] and returns true if the
-#     points are on the same line.'''
-#     Points = [p0, p1, p2]
-#     ERR=1.0e-3
-#     if len(Points)<3:
-#         return True
-#     x1, y1 = Points[0]
-#     x2, y2 = Points[1]
-#     if x2==x1:
-#         raise Exception("points are not a function")
-#     m=(y2-y1)/(x2-x1)
-#     print(np.linalg.norm(p0), np.linalg.norm(p1), np.linalg.norm(p2))
-#     print(np.linalg.det(np.array([
-#         [1, p0[0], p0[1]],
-#         [1, p1[0], p1[1]],
-#         [1, p2[0], p2[1]]
-#     ])))
-#     print([abs(m*(xi-x1)-yi+y1) for xi,yi in Points[2:]])
-#     return all([abs(m*(xi-x1)-yi+y1)<ERR for xi,yi in Points[2:]])
-
-
 def collinear(p0, p1, p2):
     det = np.linalg.det(np.array([
         [1, p0[0], p0[1]],
@@ -75,11 +46,6 @@ def collinear(p0, p1, p2):
 
 
 def project_to_cylinder2(xy: np.ndarray, cil_cen: float, cil_rad: float) -> np.ndarray:
-    # print(radius ** 2 - np.power(center_x - xy[:, naxis], 2))
-    # z = np.sqrt(radius ** 2 - np.power(center_x - xy[:, naxis], 2))
-    # print(cil_rad ** 2 )
-    # print(cil_cen)
-    # print(np.power(cil_cen - xy[:, 0], 2))
     try:
         z = np.sqrt(cil_rad ** 2 - np.power(cil_cen - xy[:, 0], 2))
     except RuntimeWarning:
@@ -259,7 +225,6 @@ def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ide
 
     xy = np.array(np.meshgrid(np.arange(dst_size),np.arange(dst_size))).T.reshape(-1, 2)
     if not colinear:
-        # cylinder_dst = project_to_cylinder(xy, cylinder_center_x, cylinder_radius, naxis=naxis)
         cylinder_dst = project_to_cylinder2(xy, cil_cen, cil_rad)
     else:
         cylinder_dst = np.vstack((xy[:, 0], xy[:, 1], np.full_like(xy[:, 0], ellipse_radius))).T
@@ -284,12 +249,48 @@ def tps_transformation(_: QRCode, src: np.ndarray, dst: np.ndarray, ideal_qr: Id
     return lambda _: markers_inv_tps
 
 
+def double_tps(qr: QRCode, bitpixel: int, border: int,
+               _: Optional[List[MatchingFeatures]] = None,
+               simple: bool = False):
+    first_tps_features = [
+        MatchingFeatures.FINDER_CENTERS,
+        MatchingFeatures.FINDER_CORNERS,
+        MatchingFeatures.ALIGNMENTS_CENTERS,
+        # MatchingFeatures.FOURTH_CORNER
+    ]
+    second_tps_features = [
+        MatchingFeatures.FINDER_CENTERS,
+        MatchingFeatures.FINDER_CORNERS,
+        MatchingFeatures.ALIGNMENTS_CENTERS,
+        MatchingFeatures.FOURTH_CORNER
+    ]
+    qr.correct(method=Correction.TPS, bitpixel=5, border=4, references_features=first_tps_features, simple=True)
+    try:
+        qrs = list(QRCode.from_image(qr.image))
+    except (ValueError, AttributeError):
+        qrs = []
+    if len(qrs) > 0:
+        assert len(qrs) == 1
+        new_qr = qrs[0]
+
+        new_qr.correct(method=Correction.TPS, bitpixel=bitpixel, border=border,
+                       references_features=second_tps_features, simple=simple)
+
+        qr.image = new_qr.image
+        qr.finder_patterns = new_qr.finder_patterns
+        qr.alignment_patterns = new_qr.alignment_patterns
+        qr.fourth_corner = new_qr.fourth_corner
+
+    return qr
+
+
 _CORRECTION_METHOD_FUNC = {
     Correction.AFFINE: general_correction(
         is_lineal=True,
         build_transformation_function=affine_correction,
         default_references_features=[
             MatchingFeatures.FINDER_CENTERS,
+            # MatchingFeatures.FINDER_CORNERS,
             MatchingFeatures.ALIGNMENTS_CENTERS,
             # MatchingFeatures.FOURTH_CORNER
         ]
@@ -299,6 +300,7 @@ _CORRECTION_METHOD_FUNC = {
         build_transformation_function=projective_correction,
         default_references_features=[
             MatchingFeatures.FINDER_CENTERS,
+            MatchingFeatures.FINDER_CORNERS,
             MatchingFeatures.ALIGNMENTS_CENTERS,
             # MatchingFeatures.FOURTH_CORNER
         ]
@@ -310,7 +312,7 @@ _CORRECTION_METHOD_FUNC = {
             MatchingFeatures.FINDER_CENTERS,
             MatchingFeatures.FINDER_CORNERS,
             MatchingFeatures.ALIGNMENTS_CENTERS,
-            MatchingFeatures.FOURTH_CORNER
+            # MatchingFeatures.FOURTH_CORNER
         ]
     ),
     Correction.TPS: general_correction(
@@ -322,7 +324,8 @@ _CORRECTION_METHOD_FUNC = {
             MatchingFeatures.ALIGNMENTS_CENTERS,
             MatchingFeatures.FOURTH_CORNER
         ]
-    )
+    ),
+    Correction.DOUBLE_TPS: double_tps
 }
 
 

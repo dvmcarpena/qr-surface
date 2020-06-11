@@ -13,7 +13,8 @@ def filter_func(labeled_image: LabeledImage) -> bool:
         # labeled_image.original_id == "bluephage"
         # labeled_image.dataset == "colorsensing"
         # labeled_image.dataset == "colorsensing2"
-        labeled_image.dataset == "synthetic_small"
+        # labeled_image.dataset == "synthetic_small"
+        labeled_image.dataset in ["synthetic_small", "colorsensing", "colorsensing2"]
         and labeled_image.localization_error is None
         # and all(
         #     qr.deformation == Deformation.PERSPECTIVE or qr.deformation == Deformation.AFFINE
@@ -40,7 +41,8 @@ corrections = [
     Correction.AFFINE,
     Correction.PROJECTIVE,
     Correction.CYLINDRICAL,
-    Correction.TPS
+    Correction.TPS,
+    Correction.DOUBLE_TPS
 ]
 
 localization_errors = [
@@ -54,8 +56,8 @@ correction_errors = [
     QRErrorId.WRONG_PIXELS
 ]
 
-RELATIVE = True
-RELATIVE_PERCENT = True
+RELATIVE = False
+RELATIVE_PERCENT = False
 
 target_images = parse_labeled_images(
     images_dir,
@@ -96,6 +98,19 @@ for labeled_image in target_images:
     else:
         localization[labeled_image.localization_error.name] += 1
 
+zbar = {
+    "GOOD": 0,
+    QRErrorId.BAD_DATA.name: 0,
+    QRErrorId.NOT_ENOUGH_QRS.name: 0
+}
+for labeled_image in target_images:
+    if labeled_image.zbar:
+        if labeled_image.zbar_error:
+            zbar[labeled_image.zbar_error.name] += 1
+        else:
+            zbar["GOOD"] += 1
+
+
 precision = 4
 if RELATIVE:
     for key, item in localization.items():
@@ -112,3 +127,4 @@ if RELATIVE:
 
 pprint(localization)
 pprint(results)
+pprint(zbar)

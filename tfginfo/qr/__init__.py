@@ -24,6 +24,7 @@ class Correction(Enum):
     PROJECTIVE = auto()
     CYLINDRICAL = auto()
     TPS = auto()
+    DOUBLE_TPS = auto()
 
 
 @dataclass

@@ -13,7 +13,7 @@ from tfginfo.features import Features
 from tfginfo.decode import decode
 from tfginfo.qr import Correction
 from tfginfo.error import QRErrorId, QRException, CorrectionException
-from tfginfo.images import LabeledImage, parse_labeled_images, parse_original_qrs
+from tfginfo.images import LabeledImage, parse_labeled_images, parse_original_qrs, Deformation
 from tfginfo.validation import check_correction, check_num_qrs, check_version, parse_qrs, sort_qrs
 
 warnings.filterwarnings('error')
@@ -22,7 +22,8 @@ PLOT_ALL = False
 PLOT_SUCCESS = False
 PLOT_CORRECTION_ERRORS = False
 PLOT_LOCALIZATION_ERRORS = False
-UPDATE_DATASET = True
+UPDATE_DATASET = False
+DIFF = True
 
 if __name__ == "__main__":
     images_dir = (Path(__file__).parent.parent / "images").resolve()
@@ -31,11 +32,16 @@ if __name__ == "__main__":
         return (
             # labeled_image.dataset == "bluephage"
             # labeled_image.dataset == "colorsensing"
-            labeled_image.dataset == "colorsensing2"
+            # labeled_image.dataset == "colorsensing2"
             # labeled_image.dataset == "synthetic_small"
+            labeled_image.dataset in ["synthetic_small", "colorsensing", "colorsensing2"]
             # and labeled_image.version == 7
             # and labeled_image.num_qrs > 1
             and labeled_image.localization_error is None
+            # and all(
+            #     qr.deformation == Deformation.CYLINDRIC
+            #     for qr in labeled_image.qrs
+            # )
             # and any(
             #     items == QRErrorId.WRONG_PIXELS
             #     for qr in labeled_image.qrs
@@ -62,11 +68,27 @@ if __name__ == "__main__":
     )
 
     corrections = [
-        # Correction.AFFINE,
-        # Correction.PROJECTIVE,
+        Correction.AFFINE,
+        Correction.PROJECTIVE,
         Correction.CYLINDRICAL,
-        # Correction.TPS
+        Correction.TPS,
+        # Correction.DOUBLE_TPS
     ]
+    if DIFF:
+        diff = {
+            "localization_error": {},
+            "correction_error": {
+                correction.name: {}
+                for correction in corrections
+            },
+            "bad_modules": {
+                correction.name: {}
+                for correction in corrections
+            },
+            "zbar_err": {}
+        }
+    else:
+        diff = None
 
     # with tqdm(total=len(target_images), ncols=150) as progress_bar:
     # with tqdm(total=len(target_images)) as progress_bar:
@@ -82,16 +104,21 @@ if __name__ == "__main__":
             labeled_image.update_legacy()
         updated = False
         try:
-            # if labeled_image.has_data:
-            #     try:
-            #         results = decode(image)
-            #         # print(f"ZBar read {len(results)} messages:")
-            #         for message in results:
-            #             # print(f"\t{message}")
-            #             pass
-            #     except ValueError:
-            #         # print("No QR read with ZBar")
-            #         pass
+            zbar_err = None
+            if labeled_image.has_data:
+                try:
+                    results = decode(image)
+                except ValueError:
+                    results = []
+
+                if labeled_image.num_qrs != len(results):
+                    zbar_err = QRErrorId.NOT_ENOUGH_QRS
+                elif any(labeled_image.data != message for message in results):
+                    zbar_err = QRErrorId.BAD_DATA
+                else:
+                    zbar_err = None
+
+            updated = labeled_image.update_zbar(labeled_image.has_data, zbar_err, diff, update=UPDATE_DATASET)
 
             features = Features.from_image(image)
             qrs = parse_qrs(image, features)
@@ -111,13 +138,15 @@ if __name__ == "__main__":
                             plt.show()
                         else:
                             plt.close()
-                        updated = labeled_image.update_successfull_correction(correction, j, bad_modules, update=UPDATE_DATASET)
+                        updated = labeled_image.update_successfull_correction(correction, j, bad_modules, diff,
+                                                                              update=UPDATE_DATASET)
                     except CorrectionException as e:
                         if PLOT_ALL or PLOT_CORRECTION_ERRORS:
                             plt.show()
                         else:
                             plt.close()
-                        updated = labeled_image.update_correction_error(correction, j, e.bad_modules, e.error, update=UPDATE_DATASET)
+                        updated = labeled_image.update_correction_error(correction, j, e.bad_modules, e.error, diff,
+                                                                        update=UPDATE_DATASET)
 
                 del cqrs
 
@@ -126,7 +155,7 @@ if __name__ == "__main__":
                 plt.show()
             else:
                 plt.close()
-            updated = labeled_image.update_localization_error(e.error, update=UPDATE_DATASET)
+            updated = labeled_image.update_localization_error(e.error, diff, update=UPDATE_DATASET)
         except Exception as e:
             # print()
             # print("INTERNAL ERROR")
@@ -139,3 +168,5 @@ if __name__ == "__main__":
 
     # pprint(results_old)
     # pprint(results)
+    if DIFF:
+        pprint(diff)
