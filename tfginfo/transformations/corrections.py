@@ -7,7 +7,7 @@ from tfginfo.qr import QRCode, Correction, IdealQRCode
 from tfginfo.utils import rgb2binary2rgb
 from tfginfo.matching import MatchingFeatures
 
-from .interpolate import RadialBasisSplines
+from .interpolate import ThinPlateSpline
 from .general import general_correction
 from .geometry import project_to_cylinder
 
@@ -236,16 +236,14 @@ def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ide
 
 def tps_transformation(_: QRCode, src: np.ndarray, dst: np.ndarray, ideal_qr: IdealQRCode):
     dst_size = ideal_qr.size
-    tps_inv_tps_m = RadialBasisSplines(
+    tps_inv_tps_m = ThinPlateSpline(
         source_landmarks=dst[:, ::-1],
         destiny_landmarks=src[:, ::-1],
-        function="thin_plate",
-        norm="euclidean",
         # smooth=1
     )
 
     markers = np.stack(np.meshgrid(np.arange(dst_size), np.arange(dst_size)), axis=2)
-    markers_inv_tps = tps_inv_tps_m(*markers.reshape((-1, 2)).T)
+    markers_inv_tps = tps_inv_tps_m(markers.reshape((-1, 2)))
     return lambda _: markers_inv_tps
 
 
