@@ -4,10 +4,10 @@ from typing import Callable, List, Optional
 import numpy as np
 from skimage import img_as_ubyte, transform
 
-from tfginfo.features import AlignmentPattern, FinderPattern
-from tfginfo.qr import QRCode, IdealQRCode
-from tfginfo.matching import MatchingFeatures
-from tfginfo.utils import rgb2binary
+from ..features import AlignmentPattern, FinderPattern
+from ..qr import QRCode, IdealQRCode
+from ..matching import MatchingFeatures
+from ..utils import rgb2binary
 
 Transformation = Callable[..., QRCode]
 

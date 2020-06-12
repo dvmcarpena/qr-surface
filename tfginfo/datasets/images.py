@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import auto, Enum, unique
 import json
 from pathlib import Path
@@ -6,10 +6,8 @@ from typing import Callable, Dict, List, Optional, Union
 
 import imageio
 import numpy as np
-from skimage import img_as_ubyte, color, filters
 
-from tfginfo.error import QRErrorId
-from tfginfo.qr import Correction
+from tfginfo.qrsurface import BadModules, Correction, QRErrorId
 
 
 @unique
@@ -26,16 +24,6 @@ class Deformation(Enum):
     PERSPECTIVE = auto()
     CYLINDRIC = auto()
     SURFACE = auto()
-
-
-@dataclass
-class BadModules:
-    count: int
-    relative: float
-    success_rate: float = field(init=False)
-
-    def __post_init__(self):
-        self.success_rate = 1 - self.relative
 
 
 @dataclass
@@ -61,9 +49,6 @@ class LabeledImage:
     zbar: Optional[bool]
     zbar_error: Optional[QRErrorId]
     qrs: List[LabeledQRCode]
-    # deformation: str
-    # correction_error: Optional[Dict[Correction, Optional[QRErrorId]]]
-    # bad_modules: Optional[Dict[Correction, BadModules]]
 
     @classmethod
     def from_path(cls, path: Path) -> 'LabeledImage':
@@ -126,33 +111,12 @@ class LabeledImage:
             ))
         assert len(qrs) == num_qrs
 
-        # localization_error_input: Optional[str] = image_data.get("localization_error", None)
-        # localization_error: Optional[QRErrorId]
-        # if localization_error_input is not None:
-        #     localization_error = QRErrorId.__members__[localization_error_input]
-        #     correction_error = None
-        #     bad_modules = None
-        # else:
-        #     localization_error = localization_error_input
-        #     correction_error_dict: Dict[str, Optional[str]] = image_data.get("correction_error", dict())
-        #     correction_error = {
-        #         Correction.__members__[key]: QRErrorId.__members__[item] if item is not None else item
-        #         for key, item in correction_error_dict.items()
-        #     }
-        #
-        #     bad_modules_dict: Dict[str, Dict[str, Union[int, float]]] = image_data.get("bad_modules", dict())
-        #     bad_modules = {
-        #         Correction.__members__[key]: BadModules(count=item["count"], relative=item["relative"])
-        #         for key, item in bad_modules_dict.items()
-        #     }
-
         return cls(
             path=path,
             data_path=data_path,
             dataset=dataset,
             bitmap_id=bitmap_id,
             image_id=image_id,
-            # version=int(bitmap_data["version"]) if bitmap_data["version"] is not None else None,
             version=int(bitmap_data["version"]),
             has_data=(dataset_dir / "bitmaps" / f"{bitmap_id}.png").exists(),
             error_correction=bitmap_data.get("error_correction", None),
@@ -162,18 +126,26 @@ class LabeledImage:
             zbar=zbar,
             zbar_error=zbar_error,
             qrs=qrs,
-            # deformation=Deformation.__members__[image_data["deformation"].upper()],
-            # localization_error=localization_error,
-            # correction_error=correction_error,
-            # bad_modules=bad_modules
         )
+
+    @classmethod
+    def search_labeled_images(cls, labeled_images_dir: Path,
+                              filter_func: Optional[Callable[['LabeledImage'], bool]] = None) -> List['LabeledImage']:
+        return list(filter(filter_func if filter_func is not None else lambda _: True, (
+            cls.from_path(image)
+            for dataset in labeled_images_dir.iterdir()
+            for image in (dataset / "images").iterdir()
+        )))
+
+    def read_image(self) -> np.ndarray:
+        return np.array(imageio.imread(str(self.path)))
 
     def has_error(self) -> bool:
         return (
             self.localization_error is not None
             or any(
                 (all(items is not None for items in qr.correction_error.values())
-                if qr.correction_error is not None else False)
+                 if qr.correction_error is not None else False)
                 for qr in self.qrs
             )
         )
@@ -295,7 +267,8 @@ class LabeledImage:
             print()
 
         if changes_correction:
-            print(f"Correction error from {correction.name} with QR number {qr_index}: {source_correction} -> {dest_correction}")
+            print(f"Correction error from {correction.name} with QR number {qr_index}: "
+                  f"{source_correction} -> {dest_correction}")
 
             if diff is not None:
                 diff_key = "correction_error"
@@ -384,33 +357,3 @@ class LabeledImage:
                     diff[diff_key][from_key][to_key] = 0
 
                 diff[diff_key][from_key][to_key] += 1
-
-
-def read_original_matrix(original_path: Path) -> np.ndarray:
-    original_path = imageio.imread(original_path)
-    gray_image = color.rgb2gray(original_path)
-    threshold = filters.threshold_otsu(gray_image)
-    return img_as_ubyte(color.gray2rgb(gray_image > threshold))
-
-
-def parse_original_qrs(labeled_images_dir: Path) -> Dict[str, np.ndarray]:
-    return {
-        f"{p.stem}_{f.stem}": read_original_matrix(f)
-        for p in labeled_images_dir.iterdir()
-        if p.is_dir()
-        for f in (p / "bitmaps").iterdir()
-        if f.is_file() and f.suffix == ".png"
-    }
-
-
-def get_original_qr(original_qrs, labeled_image: LabeledImage) -> np.ndarray:
-    return original_qrs[f"{labeled_image.dataset}_{labeled_image.bitmap_id}"]
-
-
-def parse_labeled_images(labeled_images_dir: Path,
-                         filter_func: Optional[Callable[[LabeledImage], bool]] = None) -> List[LabeledImage]:
-    return list(filter(filter_func if filter_func is not None else lambda _: True, (
-        LabeledImage.from_path(image)
-        for dataset in labeled_images_dir.iterdir()
-        for image in (dataset / "images").iterdir()
-    )))

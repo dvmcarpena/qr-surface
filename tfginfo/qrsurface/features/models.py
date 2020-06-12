@@ -4,9 +4,10 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tfginfo.utils import Array, Image
 from .utils import (get_center_from_contour, get_contour_from_center_and_ratios,
                     get_corners_from_contour, get_ratios_from_center)
+
+Array = np.ndarray
 
 
 @dataclass
@@ -18,7 +19,7 @@ class FinderPattern:
     vratios: Array
 
     @classmethod
-    def from_center_and_ratios(cls, image: Image, center: Array, hratios: Array,
+    def from_center_and_ratios(cls, image: np.ndarray, center: Array, hratios: Array,
                                vratios: Array) -> 'FinderPattern':
         # test_point_xoffset = hratios[1] + (hratios[0] + hratios[2]) // 2
         contour = get_contour_from_center_and_ratios(image, center, hratios, vratios)
@@ -38,7 +39,7 @@ class FinderPattern:
         )
 
     @classmethod
-    def from_contour(cls, image: Image, contour: Array) -> 'FinderPattern':
+    def from_contour(cls, image: np.ndarray, contour: Array) -> 'FinderPattern':
         center = get_center_from_contour(contour, image.shape)
         hratios, vratios = get_ratios_from_center(image, center)
         corners = get_corners_from_contour(
@@ -66,7 +67,7 @@ class AlignmentPattern:
     vratios: Array
 
     @classmethod
-    def from_center_and_ratios(cls, image: Image, center: Array, hratios: Array,
+    def from_center_and_ratios(cls, image: np.ndarray, center: Array, hratios: Array,
                                vratios: Array) -> 'AlignmentPattern':
         # try:
         #     # contour = get_contour_from_center_and_ratios(image, center, hratios, vratios)
@@ -92,7 +93,7 @@ class AlignmentPattern:
         )
 
     @classmethod
-    def from_contour(cls, image: Image, contour: Array) -> 'AlignmentPattern':
+    def from_contour(cls, image: np.ndarray, contour: Array) -> 'AlignmentPattern':
         center = get_center_from_contour(contour, image.shape)
         hratios, vratios = get_ratios_from_center(image, center)
         corners = get_corners_from_contour(
@@ -114,8 +115,8 @@ class AlignmentPattern:
 class Features:
 
     def __init__(self,
-                 image: Image,
-                 bw_image: Image,
+                 image: np.ndarray,
+                 bw_image: np.ndarray,
                  finder_patterns: List[FinderPattern],
                  alignment_patterns: List[AlignmentPattern]) -> None:
         self.image = image
@@ -124,7 +125,7 @@ class Features:
         self.alignment_patterns = alignment_patterns
 
     @classmethod
-    def from_image(cls, image: Image, **kwargs) -> 'Features':
+    def from_image(cls, image: np.ndarray, **kwargs) -> 'Features':
         from .features import find_all_features
         return find_all_features(image, **kwargs)
 

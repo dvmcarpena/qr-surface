@@ -2,8 +2,8 @@ from typing import Dict
 
 import numpy as np
 
-from tfginfo.matching import MatchingFeatures, References
-from tfginfo.utils import get_alignments_centers, get_size_from_version
+from ..matching import MatchingFeatures, References
+from ..utils import get_alignments_centers, get_size_from_version
 
 
 class IdealQRCode:

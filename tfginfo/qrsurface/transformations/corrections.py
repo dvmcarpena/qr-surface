@@ -1,15 +1,14 @@
 from typing import Callable, List, Optional
 
 import numpy as np
-from skimage import transform
+from skimage import measure, transform
 
-from tfginfo.qr import QRCode, Correction, IdealQRCode
-from tfginfo.utils import rgb2binary2rgb
-from tfginfo.matching import MatchingFeatures
+from ..qr import QRCode, Correction, IdealQRCode
+from ..utils import rgb2binary2rgb
+from ..matching import MatchingFeatures
 
 from .interpolate import ThinPlateSpline
 from .general import general_correction
-from .geometry import project_to_cylinder
 
 Transformation = Callable[..., QRCode]
 
@@ -88,10 +87,7 @@ def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ide
             ellipse_points,
             ellipse_points_2
         ))
-        from skimage import measure
-        # ellipse = LSqEllipse()
-        # ellipse.fit([ellipse_points[:, 0], ellipse_points[:, 1]])
-        # ellipse_center, ellipse_width, height, phi = ellipse.parameters()
+
         ellipse = measure.EllipseModel()
         ellipse.estimate(ellipse_points)
         xc, yc, ellipse_width, height, phi = ellipse.params
@@ -320,7 +316,7 @@ _CORRECTION_METHOD_FUNC = {
             MatchingFeatures.FINDER_CENTERS,
             MatchingFeatures.FINDER_CORNERS,
             MatchingFeatures.ALIGNMENTS_CENTERS,
-            MatchingFeatures.FOURTH_CORNER
+            # MatchingFeatures.FOURTH_CORNER
         ]
     ),
     Correction.DOUBLE_TPS: double_tps
@@ -331,6 +327,6 @@ def correction(qr: QRCode, method: Optional[Correction] = None, bitpixel: int = 
                **kwargs) -> QRCode:
     if method is None:
         method = Correction.PROJECTIVE
-    # print(bitpixel, border)
+
     func = _CORRECTION_METHOD_FUNC[method]
     return func(qr, bitpixel, border, **kwargs)

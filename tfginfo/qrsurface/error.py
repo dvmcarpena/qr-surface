@@ -1,4 +1,15 @@
+from dataclasses import dataclass, field
 from enum import Enum, unique
+
+
+@dataclass
+class BadModules:
+    count: int
+    relative: float
+    success_rate: float = field(init=False)
+
+    def __post_init__(self):
+        self.success_rate = 1 - self.relative
 
 
 @unique
@@ -13,7 +24,7 @@ class QRErrorId(Enum):
     def exception(self, **kwargs) -> 'QRException':
         raise QRException(self, **kwargs)
 
-    def correction_exception(self, bad_modules, **kwargs):
+    def correction_exception(self, bad_modules: BadModules, **kwargs):
         raise CorrectionException(bad_modules, self, **kwargs)
 
 
@@ -31,6 +42,6 @@ class QRException(Exception):
 
 class CorrectionException(QRException):
 
-    def __init__(self, bad_modules, error_id: QRErrorId, **kwargs):
+    def __init__(self, bad_modules: BadModules, error_id: QRErrorId, **kwargs):
         super(CorrectionException, self).__init__(error_id, **kwargs)
         self.bad_modules = bad_modules

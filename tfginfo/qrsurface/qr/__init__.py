@@ -1,17 +1,17 @@
 import copy
 from dataclasses import dataclass, field
 from enum import auto, Enum, unique
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional
 
 import matplotlib.colors
 from matplotlib import pyplot as plt
 import numpy as np
-from skimage import color, filters, img_as_ubyte, transform
+from skimage import color, img_as_ubyte, transform
 
-from tfginfo.utils import Array, Image, create_bounding_box, get_size_from_version, get_alignments_centers
-from tfginfo.features import AlignmentPattern, Features, FinderPattern
-from tfginfo.decode import decode
-from tfginfo.matching import MatchingFeatures, References
+from ..utils import create_bounding_box, get_size_from_version, get_alignments_centers
+from ..features import AlignmentPattern, Features
+from ..decode import decode
+from ..matching import MatchingFeatures, References
 
 from .ideal import IdealQRCode
 from .utils import (choose_and_order_alignments, group_finder_patterns, guess_version, guess_version_from_finders,
@@ -29,23 +29,23 @@ class Correction(Enum):
 
 @dataclass
 class QRCode:
-    image: Image
+    image: np.ndarray
     finder_patterns: OrderedFinderPatterns
     version: int
     alignment_patterns: List[Optional[AlignmentPattern]]
-    fourth_corner: Optional[Array]
+    fourth_corner: Optional[np.ndarray]
     size: int = field(init=False)
 
     def __post_init__(self):
         self.size = get_size_from_version(self.version)
 
     @classmethod
-    def from_image(cls, image: Image, **kwargs) -> Iterator['QRCode']:
+    def from_image(cls, image: np.ndarray, **kwargs) -> Iterator['QRCode']:
         features = Features.from_image(image, **kwargs)
         return cls.from_features(image, features)
 
     @classmethod
-    def from_features(cls, image: Image, features: Features) -> Iterator['QRCode']:
+    def from_features(cls, image: np.ndarray, features: Features) -> Iterator['QRCode']:
         all_finder_patterns = copy.deepcopy(features.finder_patterns)
         all_alignment_patterns = copy.deepcopy(features.alignment_patterns)
 
@@ -77,6 +77,10 @@ class QRCode:
                 alignment_patterns=alignment_patterns,
                 fourth_corner=fourth_corner
             )
+
+    def update_version(self, version: int) -> None:
+        self.version = version
+        self.size = get_size_from_version(self.version)
 
     def get_bounding_box_image(self):
         f1, f2, f3 = self.finder_patterns
@@ -165,11 +169,11 @@ class QRCode:
         }
 
     def correct(self, method: Optional[Correction] = None, **kwargs):
-        from tfginfo.transformations import correction
+        from tfginfo.qrsurface.transformations import correction
         return correction(self, method, **kwargs)
 
     def binarize(self, **kwargs):
-        from tfginfo.transformations import binarization
+        from tfginfo.qrsurface.transformations import binarization
         return binarization(self, **kwargs)
 
     def decode(self, bounding_box: bool = True, sample: bool = False):
@@ -204,32 +208,6 @@ class QRCode:
 
     def sample(self, method=Correction.PROJECTIVE):
         qr_sampled = copy.deepcopy(self)
-
-        # if len(list(filter(lambda a: a is not None, qr_sampled.alignment_patterns))) == 0:
-        #     qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=1, border=0, references_features=[
-        #         MatchingFeatures.FINDER_CENTERS,
-        #         MatchingFeatures.FINDER_CORNERS,
-        #         MatchingFeatures.ALIGNMENTS_CENTERS,
-        #         MatchingFeatures.FOURTH_CORNER
-        #     ])
-        # if method == Correction.TPS:
-        #     qr_sampled.correct(method=method, bitpixel=5, border=0, simple=True)
-        #     qr_sampled.binarize()
-        #     size = get_size_from_version(qr_sampled.version)
-        #     qr_sampled.image = img_as_ubyte(transform.resize(qr_sampled.image, (size, size), order=0, anti_aliasing=False))
-        #
-        #     # gray_image = color.rgb2gray(qr_sampled.image)
-        #     # threshold = filters.threshold_otsu(gray_image)
-        #     # qr_sampled.image = img_as_ubyte(color.gray2rgb(gray_image > threshold))
-        #     # plt.figure()
-        #     # plt.imshow(qr_sampled.image)
-        #     # plt.show()
-        # else:
-        #     qr_sampled.binarize()
-        #     qr_sampled.correct(method=method, bitpixel=1, border=0)
-        # qr_sampled.correct(method=method, bitpixel=5, border=10)
-        # qr_sampled.binarize()
-        # qr_sampled.correct(method=method, bitpixel=1, border=0, simple=True)
 
         qr_sampled.correct(method=method, bitpixel=5, border=0, simple=True)
         qr_sampled.binarize()
@@ -289,7 +267,7 @@ class QRCode:
 
 @dataclass
 class SampledQRCode:
-    image: Image
+    image: np.ndarray
     version: int
 
     def count_errors(self, original: np.ndarray) -> int:

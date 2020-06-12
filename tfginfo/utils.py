@@ -1,125 +1,106 @@
-import itertools
-from typing import List, Optional, Tuple
+import copy
+from typing import List, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
-from skimage import color, img_as_ubyte, filters
 
-Array = np.ndarray
-Image = np.ndarray
-
-_NUM_ALIGNMENT_PATTERN_BY_VERSION = [0] + [
-    1
-    for _ in range(2, 7)
-] + [
-    6
-    for _ in range(7, 14)
-] + [
-    13
-    for _ in range(14, 21)
-] + [
-    22
-    for _ in range(21, 28)
-] + [
-    33
-    for _ in range(28, 35)
-] + [
-    46
-    for _ in range(35, 41)
-]
-
-_ALIGNMENT_PATTERN_POSITIONS_TABLE = [
-    [],
-    [6, 18],
-    [6, 22],
-    [6, 26],
-    [6, 30],
-    [6, 34],
-    [6, 22, 38],
-    [6, 24, 42],
-    [6, 26, 46],
-    [6, 28, 50],
-    [6, 30, 54],
-    [6, 32, 58],
-    [6, 34, 62],
-    [6, 26, 46, 66],
-    [6, 26, 48, 70],
-    [6, 26, 50, 74],
-    [6, 30, 54, 78],
-    [6, 30, 56, 82],
-    [6, 30, 58, 86],
-    [6, 34, 62, 90],
-    [6, 28, 50, 72, 94],
-    [6, 26, 50, 74, 98],
-    [6, 30, 54, 78, 102],
-    [6, 28, 54, 80, 106],
-    [6, 32, 58, 84, 110],
-    [6, 30, 58, 86, 114],
-    [6, 34, 62, 90, 118],
-    [6, 26, 50, 74, 98, 122],
-    [6, 30, 54, 78, 102, 126],
-    [6, 26, 52, 78, 104, 130],
-    [6, 30, 56, 82, 108, 134],
-    [6, 34, 60, 86, 112, 138],
-    [6, 30, 58, 86, 114, 142],
-    [6, 34, 62, 90, 118, 146],
-    [6, 30, 54, 78, 102, 126, 150],
-    [6, 24, 50, 76, 102, 128, 154],
-    [6, 28, 54, 80, 106, 132, 158],
-    [6, 32, 58, 84, 110, 136, 162],
-    [6, 26, 54, 82, 110, 138, 166],
-    [6, 30, 58, 86, 114, 142, 170]
-]
+from tfginfo.datasets import Deformation, BitmapCollection, LabeledImage
+from tfginfo.qrsurface import BadModules, Correction, decode, Features, QRCode, QRErrorId
 
 
-def get_num_aligns_from_version(version: int) -> int:
-    return _NUM_ALIGNMENT_PATTERN_BY_VERSION[version - 1]
+def try_decode_with_zbar(labeled_image: LabeledImage, image: np.ndarray) -> Optional[QRErrorId]:
+    if not labeled_image.has_data:
+        return None
+
+    try:
+        results = decode.decode(image)
+    except ValueError:
+        results = []
+
+    if labeled_image.num_qrs != len(results):
+        zbar_err = QRErrorId.NOT_ENOUGH_QRS
+    elif any(labeled_image.data != message for message in results):
+        zbar_err = QRErrorId.BAD_DATA
+    else:
+        zbar_err = None
+
+    return zbar_err
 
 
-def get_alignment_pattern_positions(version: int) -> List[int]:
-    return _ALIGNMENT_PATTERN_POSITIONS_TABLE[version - 1]
+def parse_qrs(image: np.ndarray, features: Features) -> List[QRCode]:
+    try:
+        return list(QRCode.from_features(image, features))
+    except Exception:
+        features.plot()
+        raise QRErrorId.ERROR_FEATURES.exception()
 
 
-def get_size_from_version(version: int) -> int:
-    return version * 4 + 17
+def check_num_qrs(labeled_image: LabeledImage, features: Features, qrs: List[QRCode]):
+    if len(qrs) < labeled_image.num_qrs:
+        features.plot()
+        raise QRErrorId.NOT_ENOUGH_QRS.exception()
+    elif len(qrs) == 0:
+        features.plot()
 
 
-def get_alignments_centers(version: int) -> List[Tuple[int, int]]:
-    """
-    Gets the centers of the alignment table.
-
-    :param version: The version.
-
-    :return: The centers of the alignment table.
-    """
-    if version == 1:
-        return []
-
-    positions = get_alignment_pattern_positions(version)
-    all_coords = list(itertools.product(positions, positions))
-
-    all_coords.remove((positions[0], positions[0]))
-    all_coords.remove((positions[-1], positions[0]))
-    all_coords.remove((positions[0], positions[-1]))
-
-    return all_coords
+def check_version(labeled_image: LabeledImage, features: Features, qrs: List[QRCode]):
+    for i, qr in enumerate(qrs):
+        if labeled_image.version is not None:
+            if labeled_image.qrs[i].deformation == Deformation.SURFACE:
+                qr.update_version(labeled_image.version)
+            elif labeled_image.version != qr.version:
+                features.plot()
+                raise QRErrorId.WRONG_VERSION.exception(
+                    estimated=qr.version,
+                    expected=labeled_image.version
+                )
 
 
-def create_bounding_box(points: Array) -> Array:
-    min_x, min_y = np.min(points, axis=0)
-    max_x, max_y = np.max(points, axis=0)
-    return np.array([(min_x, min_y), (max_x, max_y)])
+def sort_qrs(qrs: List[QRCode]) -> List[QRCode]:
+    if len(qrs) == 0:
+        return qrs
+
+    points = np.array([qr.finder_patterns[0].center for qr in qrs])
+    return list(np.array(qrs)[np.lexsort((points[:, 0], points[:, 1]))])
 
 
-def rgb2binary(image: np.ndarray, block_size: Optional[int] = None) -> np.ndarray:
-    block_size = 151 if block_size is None else block_size
-    assert isinstance(block_size, int)
+def check_correction(labeled_image: LabeledImage, features: Features, qr: QRCode,
+                     bitmaps: BitmapCollection, correction: Correction) -> Optional[BadModules]:
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
+    fig.suptitle(f"{labeled_image.path.name} {correction.name}")
 
-    gray_image = color.rgb2gray(image)
-    threshold: np.ndarray = filters.threshold_sauvola(gray_image, block_size)
-    #threshold = filters.threshold_otsu(gray_image)
+    features.plot(axes=ax1)
+    qr.plot(axes=ax2)
 
-    return gray_image > threshold
+    correct_qr = copy.deepcopy(qr)
+    correct_qr.correct(method=correction, bitpixel=5, border=8, simple=True)
+    correct_qr.plot(axes=ax3)
 
+    if not labeled_image.has_data:
+        return None
 
-def rgb2binary2rgb(image: np.ndarray, **kwargs) -> np.ndarray:
-    return img_as_ubyte(color.gray2rgb(rgb2binary(image, **kwargs)))
+    bitmap = bitmaps.get_bitmap(labeled_image)
+    sampled_qr = qr.sample(method=correction)
+
+    sampled_qr.plot_differences(bitmap, axes=ax4)
+
+    errors = sampled_qr.count_errors(bitmap)
+    bad_modules = BadModules(
+        count=errors,
+        relative=errors / (qr.size**2)
+    )
+
+    try:
+        data = sampled_qr.decode()
+    except ValueError:
+        raise QRErrorId.CANT_READ.correction_exception(bad_modules)
+
+    if data != labeled_image.data:
+        print(data)
+        print(labeled_image.data)
+        raise QRErrorId.BAD_DATA.correction_exception(bad_modules)
+
+    if errors > 0:
+        raise QRErrorId.WRONG_PIXELS.correction_exception(bad_modules, num_pixels=errors)
+
+    return bad_modules

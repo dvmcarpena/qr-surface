@@ -1,12 +1,12 @@
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
-from skimage import draw, feature, measure, filters
+from skimage import draw, feature, measure
 
-from tfginfo.utils import Array, Image, create_bounding_box
+from ..utils import create_bounding_box
 
 
-def get_center_from_contour(contour: Array, shape: Tuple[int, int]) -> Array:
+def get_center_from_contour(contour: np.ndarray, shape: Tuple[int, int]) -> np.ndarray:
     # TODO optimize to bbox only
     cimg = np.zeros(shape)
     #cimg[contour.astype(np.uint32)] = 1
@@ -19,7 +19,7 @@ def get_center_from_contour(contour: Array, shape: Tuple[int, int]) -> Array:
     return np.array([m[1, 0] / m[0, 0], m[0, 1] / m[0, 0]])
 
 
-def create_line_iterator(p1: Array, p2: Array, img: Array) -> Tuple[Array, Array]:
+def create_line_iterator(p1: np.ndarray, p2: np.ndarray, img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     Produces and array that consists of the coordinates and intensities of each pixel in a line between two points
 
@@ -92,11 +92,11 @@ def create_line_iterator(p1: Array, p2: Array, img: Array) -> Tuple[Array, Array
     return it_buffer[:, 0:2].astype(np.uint64), line_color.astype(np.uint64)
 
 
-def get_corners_from_contour(contour: Array,
-                             center: Array,
+def get_corners_from_contour(contour: np.ndarray,
+                             center: np.ndarray,
                              shape: Tuple[int, int],
                              num_corners: int,
-                             min_distance: int) -> Array:
+                             min_distance: int) -> np.ndarray:
 
     # TODO optimize to bbox only
 
@@ -195,12 +195,12 @@ def get_corners_from_contour(contour: Array,
     return corners
 
 
-def get_ratios_from_center(image: Image, center: Array) -> Tuple[Array, Array]:
+def get_ratios_from_center(image: np.ndarray, center: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     pass
     # TODO
 
 
-def get_contours_with_center(image: Image, center: Array, hratios: Array, vratios: Array):
+def get_contours_with_center(image: np.ndarray, center: np.ndarray, hratios: np.ndarray, vratios: np.ndarray):
     hsize, vsize = sum(hratios), sum(vratios)
     radius = 0.75
     hradius, vradius = int(hsize * radius), int(vsize * radius)
@@ -251,8 +251,8 @@ def get_contours_with_center(image: Image, center: Array, hratios: Array, vratio
     return candidates
 
 
-def get_contour_from_center_and_ratios(image: Image, center: Array, hratios: Array,
-                                       vratios: Array) -> Array:
+def get_contour_from_center_and_ratios(image: np.ndarray, center: np.ndarray, hratios: np.ndarray,
+                                       vratios: np.ndarray) -> np.ndarray:
     hsize, vsize = sum(hratios), sum(vratios)
     radius = 0.75
     hradius, vradius = int(hsize * radius), int(vsize * radius)

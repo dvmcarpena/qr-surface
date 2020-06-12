@@ -3,7 +3,6 @@ from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
-from tfginfo.utils import Image
 from .ratios import find_general
 from .models import AlignmentPattern
 

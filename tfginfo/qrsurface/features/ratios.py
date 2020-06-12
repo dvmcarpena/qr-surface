@@ -1,9 +1,6 @@
 from typing import Tuple, List, Optional
 
 import numpy as np
-from tqdm import tqdm
-
-from tfginfo.utils import Array, Image
 
 from .utils import get_contours_with_center
 
@@ -50,7 +47,7 @@ def check_general_ratio(ratios, widths, strict_border: bool) -> bool:
     return all(middle_ratios + border_ratios)
 
 
-def compute_widths_by_row(row: Array) -> Tuple[List, List]:
+def compute_widths_by_row(row: np.ndarray) -> Tuple[List, List]:
     # line_val = []
     # line_rep = []
     # last = None
@@ -264,8 +261,8 @@ def check_contours(bw_image, centerRow, centerCol, hratios, strict_border):
     return centerRow, centerCol
 
 
-def find_general(bw_image: Image, iratios, center_color: bool,
-                 strict_border: bool, diagonals, countours) -> List[List[Array]]:
+def find_general(bw_image: np.ndarray, iratios, center_color: bool,
+                 strict_border: bool, diagonals, countours) -> List[List[np.ndarray]]:
     border_color = bool((len(iratios) // 2 + int(center_color)) % 2)
 
     candidates = []

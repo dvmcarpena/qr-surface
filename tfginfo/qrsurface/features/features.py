@@ -1,11 +1,12 @@
-from tfginfo.utils import Image, rgb2binary
+import numpy as np
 
+from ..utils import rgb2binary
 from .alignmentpatterns import find_alignment_patterns
 from .finderpatterns import find_finder_patterns
 from .models import Features
 
 
-def find_all_features(image: Image, **kwargs) -> Features:
+def find_all_features(image: np.ndarray, **kwargs) -> Features:
     bw_image = rgb2binary(image)
     return Features(
         image=image,

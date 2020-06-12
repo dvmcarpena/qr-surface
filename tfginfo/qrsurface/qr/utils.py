@@ -6,9 +6,9 @@ from scipy.spatial import distance
 from scipy import spatial
 from sklearn import cluster
 
-from tfginfo.utils import Array, get_size_from_version, get_alignments_centers, Image
-from tfginfo.features import AlignmentPattern, FinderPattern
-from tfginfo.features.corner import corner_scan
+from ..utils import get_size_from_version, get_alignments_centers
+from ..features import AlignmentPattern, FinderPattern
+from ..features.corner import corner_scan
 
 OrderedFinderPatterns = Tuple[FinderPattern, FinderPattern, FinderPattern]
 
@@ -264,7 +264,7 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
     total_size = get_size_from_version(version)
     ideal_positions = np.array(ideal_positions) / total_size
 
-    def transf(ap: AlignmentPattern) -> Tuple[AlignmentPattern, Array]:
+    def transf(ap: AlignmentPattern) -> Tuple[AlignmentPattern, np.ndarray]:
         # return ap, (mat @ np.array([
         #     [ap.center[0]],
         #     [ap.center[1]],
@@ -351,7 +351,7 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
     return ordered_ap
 
 
-def find_fourth_corner(bw_image: Image,
+def find_fourth_corner(bw_image: np.ndarray,
                        finder_patterns: OrderedFinderPatterns,
                        version: int,
                        alignment_patterns: List[AlignmentPattern]) -> Optional[np.ndarray]:
@@ -519,7 +519,7 @@ def find_fourth_corner(bw_image: Image,
     return tr.inverse(fourth_corner)[0][::-1] if fourth_corner is not None else None
 
 
-def guess_version(version_points: Array) -> int:
+def guess_version(version_points: np.ndarray) -> int:
     """
     Algorithm that find the version of a QR code using 2 outer corners of 2 of the
     position patters, that need to be on the same side of the QR, and that side
