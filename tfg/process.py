@@ -5,9 +5,9 @@ from typing import List
 
 import matplotlib.pyplot as plt
 
-from tfginfo.qrsurface import Correction, CorrectionException, Features, QRException
-from tfginfo.datasets import LabeledImage, BitmapCollection
-from tfginfo.utils import check_correction, check_num_qrs, check_version, parse_qrs, sort_qrs, try_decode_with_zbar
+from tfg.qrsurface import Correction, CorrectionException, Features, QRException
+from tfg.datasets import LabeledImage, BitmapCollection
+from tfg.utils import check_correction, check_num_qrs, check_version, parse_qrs, sort_qrs, try_decode_with_zbar
 
 
 def process_results(target_images: List[LabeledImage], corrections: List[Correction], images_dir: Path,
@@ -60,8 +60,8 @@ def process_results(target_images: List[LabeledImage], corrections: List[Correct
                             plt.show()
                         else:
                             plt.close()
-                        updated = labeled_image.update_successfull_correction(correction, j, bad_modules, diff,
-                                                                              update=update)
+                        updated = labeled_image.update_successful_correction(correction, j, bad_modules, diff,
+                                                                             update=update)
                     except CorrectionException as e:
                         if plot_all or plot_correction_errors:
                             plt.show()

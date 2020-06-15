@@ -3,7 +3,7 @@ import warnings
 
 import click
 
-from tfginfo import Correction, Deformation, LabeledImage, process_results, read_results
+from tfg import Correction, Deformation, LabeledImage, process_results, QRErrorId, read_results
 
 
 def filter_func(labeled_image: LabeledImage) -> bool:
@@ -12,7 +12,7 @@ def filter_func(labeled_image: LabeledImage) -> bool:
         # labeled_image.dataset == "colorsensing2"
         # labeled_image.dataset == "synthetic_small"
         labeled_image.dataset in ["synthetic_small", "colorsensing", "colorsensing2"]
-        and labeled_image.localization_error is None
+        # and labeled_image.localization_error is None
         # and labeled_image.has_error()
         # and not labeled_image.has_error()
         # and labeled_image.version == 7
@@ -48,16 +48,16 @@ def filter_func(labeled_image: LabeledImage) -> bool:
 
 
 corrections = [
-    # Correction.AFFINE,
-    # Correction.PROJECTIVE,
-    # Correction.CYLINDRICAL,
+    Correction.AFFINE,
+    Correction.PROJECTIVE,
+    Correction.CYLINDRICAL,
     Correction.TPS,
     # Correction.DOUBLE_TPS
 ]
 
 warnings.filterwarnings('error')
-images_dir = (Path(__file__).parent.parent / "datasets").resolve()
-target_images = LabeledImage.search_labeled_images(images_dir, filter_func=filter_func)[:1]
+images_dir = (Path(__file__).parent.parent / "data" / "datasets").resolve()
+target_images = LabeledImage.search_labeled_images(images_dir, filter_func=filter_func)#[1:]
 
 
 @click.group()
@@ -97,12 +97,7 @@ def process(update, no_show_diff, plot_all, plot_success, plot_localization_erro
 
 @cli.command()
 def results():
-    read_results(
-        target_images=target_images,
-        corrections=corrections,
-        relative=False,
-        relative_percent=True
-    )
+    read_results(target_images=target_images, corrections=corrections)
 
 
 cli()

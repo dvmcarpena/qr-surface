@@ -18,6 +18,7 @@ tqdm = "*"
 scipy = "*"
 scikit-learn = "*"
 click = "*"
+pandas = "*"
 
 [requires]
 python_version = "3.7"

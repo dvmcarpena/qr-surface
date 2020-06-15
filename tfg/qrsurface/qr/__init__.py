@@ -124,11 +124,6 @@ class QRCode:
             if s < v:
                 bbox[i, 1] = s
 
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.imshow(self.image[bbox[0][0]:bbox[1][0], bbox[0][1]:bbox[1][1]])
-        # plt.show()
-
         return self.image[bbox[0][0]:bbox[1][0], bbox[0][1]:bbox[1][1]]
 
     def create_references(self, features: List[MatchingFeatures]) -> References:
@@ -169,11 +164,11 @@ class QRCode:
         }
 
     def correct(self, method: Optional[Correction] = None, **kwargs):
-        from tfginfo.qrsurface.transformations import correction
+        from tfg.qrsurface.transformations import correction
         return correction(self, method, **kwargs)
 
     def binarize(self, **kwargs):
-        from tfginfo.qrsurface.transformations import binarization
+        from tfg.qrsurface.transformations import binarization
         return binarization(self, **kwargs)
 
     def decode(self, bounding_box: bool = True, sample: bool = False):

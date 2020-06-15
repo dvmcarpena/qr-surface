@@ -114,11 +114,7 @@ class AlignmentPattern:
 
 class Features:
 
-    def __init__(self,
-                 image: np.ndarray,
-                 bw_image: np.ndarray,
-                 finder_patterns: List[FinderPattern],
-                 alignment_patterns: List[AlignmentPattern]) -> None:
+    def __init__(self, image: np.ndarray, bw_image: np.ndarray, finder_patterns: List[FinderPattern], alignment_patterns: List[AlignmentPattern]) -> None:
         self.image = image
         self.bw_image = bw_image
         self.finder_patterns = finder_patterns

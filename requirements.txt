@@ -8,3 +8,5 @@ matplotlib
 pyzbar
 tqdm
 click
+imgaug
+pandas

@@ -4,8 +4,8 @@ from typing import List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tfginfo.datasets import Deformation, BitmapCollection, LabeledImage
-from tfginfo.qrsurface import BadModules, Correction, decode, Features, QRCode, QRErrorId
+from tfg.datasets import Deformation, BitmapCollection, LabeledImage
+from tfg.qrsurface import BadModules, Correction, decode, Features, QRCode, QRErrorId
 
 
 def try_decode_with_zbar(labeled_image: LabeledImage, image: np.ndarray) -> Optional[QRErrorId]:

@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Optional, Union
 import imageio
 import numpy as np
 
-from tfginfo.qrsurface import BadModules, Correction, QRErrorId
+from tfg.qrsurface import BadModules, Correction, QRErrorId
 
 
 @unique
@@ -216,8 +216,8 @@ class LabeledImage:
             data.pop("bad_modules")
         self.save_raw_data(data)
 
-    def update_successfull_correction(self, correction: Correction, qr_index: int, bad_modules: BadModules,
-                                      diff: Optional[Dict], update: bool = False) -> bool:
+    def update_successful_correction(self, correction: Correction, qr_index: int, bad_modules: BadModules,
+                                     diff: Optional[Dict], update: bool = False) -> bool:
         return self._update_correction(correction, qr_index, bad_modules, None, diff, update=update)
 
     def update_correction_error(self, correction: Correction, qr_index: int, bad_modules: BadModules,
