@@ -9,16 +9,34 @@ from ..matching import MatchingFeatures
 
 from .interpolate import ThinPlateSpline
 from .general import general_correction
+from .geometry import collinear, project_to_cylinder
 
 Transformation = Callable[..., QRCode]
 
 
 def binarization(qr: QRCode, block_size: Optional[int] = None, **kwargs) -> QRCode:
+    """
+    Makes a binarization of the underlying image in the QRCode
+
+    :param qr: The QRCode that we want to binarize
+    :param block_size: The block size used in the local threshold
+    :param kwargs: Keyword arguments to the rgb2binary2rgb function
+
+    :return: The QR with the image binarized
+    """
     qr.image = rgb2binary2rgb(qr.image, block_size=block_size, **kwargs)
     return qr
 
 
 def affine_correction(src: np.ndarray, dst: np.ndarray):
+    """
+    Build the affine forward linear mapping of the correction between the given references
+
+    :param src: The source reference points
+    :param dst: The destiny reference points
+
+    :return: The forward linear mapping transformation
+    """
     return transform.estimate_transform(
         ttype="affine",
         src=src[:, ::-1],
@@ -27,6 +45,14 @@ def affine_correction(src: np.ndarray, dst: np.ndarray):
 
 
 def projective_correction(src: np.ndarray, dst: np.ndarray):
+    """
+    Build the projective forward linear mapping of the correction between the given references
+
+    :param src: The source reference points
+    :param dst: The destiny reference points
+
+    :return: The forward linear mapping transformation
+    """
     return transform.estimate_transform(
         ttype="projective",
         src=src[:, ::-1],
@@ -34,25 +60,17 @@ def projective_correction(src: np.ndarray, dst: np.ndarray):
     )
 
 
-def collinear(p0, p1, p2):
-    det = np.linalg.det(np.array([
-        [1, p0[0], p0[1]],
-        [1, p1[0], p1[1]],
-        [1, p2[0], p2[1]]
-    ]))
-    cot = max(np.linalg.norm(p0), np.linalg.norm(p1), np.linalg.norm(p2))
-    return abs(det) < cot
-
-
-def project_to_cylinder2(xy: np.ndarray, cil_cen: float, cil_rad: float) -> np.ndarray:
-    try:
-        z = np.sqrt(cil_rad ** 2 - np.power(cil_cen - xy[:, 0], 2))
-    except RuntimeWarning:
-        z = np.zeros_like(xy[:, 0])
-    return np.vstack((xy[:, 0], xy[:, 1], z)).T
-
-
 def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ideal_qr: IdealQRCode):
+    """
+    Build the cylindrical inverse mapping of the correction between the given references
+
+    :param qr: The QRCode object
+    :param src: The source reference points
+    :param dst: The destiny reference points
+    :param ideal_qr: The ideal QR object that we want to achieve at the destiny
+
+    :return: The inverse mapping transformation
+    """
     dst_size = ideal_qr.size
     f1 = qr.finder_patterns[0]
     f2 = qr.finder_patterns[1]
@@ -68,8 +86,6 @@ def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ide
     sign2 = abs(f1.corners[0][0] - f2.corners[1][0]) > abs(f1.corners[0][1] - f2.corners[1][1])
 
     colinear = collinear(f1.corners[0][::-1], f1.corners[1][::-1], f2.corners[1][::-1])
-
-    # print(f"Colinear: {colinear}")
     if not colinear:
         ellipse_points = np.concatenate((
             f1.corners[0][::-1].reshape((1, 2)),
@@ -106,105 +122,19 @@ def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ide
 
         cil_rel = (cil_center - cil_orig) / cil_side
 
-        # from matplotlib import pyplot as plt
-        # from matplotlib.patches import Ellipse
-        # from mpl_toolkits.mplot3d import Axes3D
-        #
-        # fig = plt.figure(figsize=[24, 12])
-        # ax = fig.add_subplot(1, 1, 1)
-        # ax.set_title("Original Image")
-        #
-        # ellipse_patch = Ellipse(xy=ellipse_center, width=2 * ellipse_width, height=2 * height, angle=np.rad2deg(phi),
-        #                         edgecolor='g', fc='None', lw=2, label='Fit', zorder=2)
-        # ax.add_patch(ellipse_patch)
-        # # ellipse_patch = Ellipse(
-        # #     xy=(
-        # #         ellipse_center[0] - old_sq[0][1][0] + old_sq[2][2][0],
-        # #         ellipse_center[1] - old_sq[0][1][1] + old_sq[2][2][1]
-        # #     ),
-        # #     width=2 * ellipse_width + 30,
-        # #     height=2 * height,
-        # #     angle=np.rad2deg(phi),
-        # #     edgecolor='r', fc='None', lw=2, label='Fit', zorder=2)
-        # # ax.add_patch(ellipse_patch)
-        # ax.imshow(qr.image)
-        # ax.plot(ellipse_points[:, 0], ellipse_points[:, 1], 'ro', label='test data', zorder=1)
-        # ax.plot(src[:, 0], src[:, 1], 'ro', label='test data', zorder=1)
-        # plt.show()
-
-        # cylinder_radius = max(ellipse_width, height)
-        # try:
-        #     naxis = 0
-        #     cylinder_center_x = ellipse_center[naxis]
-        #     cylinder_dst = project_to_cylinder(dst, cylinder_center_x, cylinder_radius, naxis=naxis)
-        # except RuntimeWarning:
-        #     naxis = 1
-        #     cylinder_center_x = ellipse_center[naxis]
-        #     cylinder_dst = project_to_cylinder(dst, cylinder_center_x, cylinder_radius, naxis=naxis)
-
         dst_side = abs(ideal_qr.finders_corners_by_finder[0][0][0] - ideal_qr.finders_corners_by_finder[1][1][0])
         dst_orig = ideal_qr.finders_corners_by_finder[0][0][0]
-        # print(cil_rel)
-        # print(dst_orig)
-        # print(dst_side * cil_rel)
         cil_cen = dst_side * cil_rel + dst_orig
         cil_rad *= dst_side
-        cylinder_dst = project_to_cylinder2(dst, cil_cen, cil_rad)
-
-        # cylinder_radius = ellipse_width
-        # cylinder_center_x = ellipse_center[0]
-        # cylinder_dst = project_to_cylinder(dst, cylinder_center_x, cylinder_radius, naxis=0)
+        cylinder_dst = project_to_cylinder(dst, cil_cen, cil_rad)
     else:
         cylinder_dst = np.vstack((dst[:, 0], dst[:, 1], np.full_like(dst[:, 0], 0))).T
-
-    # n, m, i = 2, 2, 1
-    # fig = plt.figure(figsize=[24, 12])
-    #
-    # ax: Axes3D = fig.add_subplot(n, m, i, projection='3d')
-    # ax.set_title("Destiny result points")
-    # ax.scatter(dst[:, 0], dst[:, 1], np.full_like(dst[:, 1], 0), c="red")
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # ax.set_zlabel('Z')
-    # ax.set_zlim(0, 800)
-    # i += 1
-    #
-    # ax: Axes3D = fig.add_subplot(n, m, i, projection='3d')
-    # ax.set_title("Cilindric projection of ideal points")
-    # ax.scatter(cylinder_dst[:, 0], cylinder_dst[:, 1], cylinder_dst[:, 2], c="blue")
-    # ax.scatter(dst[:, 0], dst[:, 1], np.full_like(dst[:, 1], 0), c="red")
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # ax.set_zlabel('Z')
-    # ax.set_zlim(0, 800)
-    # i += 1
-    #
-    # ax: Axes3D = fig.add_subplot(n, m, i, projection='3d')
-    # ax.set_title("Source image points")
-    # ax.scatter(src[:, ::-1][:, 0], src[:, ::-1][:, 1], np.full_like(src[:, 1], 0), c="green", marker="*")
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # ax.set_zlabel('Z')
-    # ax.set_zlim(0, 800)
-    # i += 1
-    #
-    # ax: Axes3D = fig.add_subplot(n, m, i, projection='3d')
-    # ax.set_title("All in one plot")
-    # ax.scatter(cylinder_dst[:, 0], cylinder_dst[:, 1], cylinder_dst[:, 2], c="blue")
-    # ax.scatter(dst[:, 0], dst[:, 1], np.full_like(dst[:, 1], 0), c="red")
-    # ax.scatter(src[:, ::-1][:, 0], src[:, ::-1][:, 1], np.full_like(src[:, 1], 0), c="green", marker="*")
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # ax.set_zlabel('Z')
-    # ax.set_zlim(0, 800)
-    # i += 1
 
     b_u = []
     b_v = []
     d_u = []
     d_v = []
     for (x, y, z), (u, v) in zip(cylinder_dst, src[:, ::-1]):
-        # X Y Z 1 0 0 0 0 −uX −uY −uZ
         row_u = np.array([x, y, z, 1, 0, 0, 0, 0, -u * x, -u * y, -u * z])
         row_v = np.array([0, 0, 0, 0, x, y, z, 1, -v * x, -v * y, -v * z])
         d_u.append(row_u)
@@ -219,9 +149,9 @@ def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ide
     m, res, rank, sv = np.linalg.lstsq(D, b, rcond=None)
     matrix = np.append(m, 1).reshape(3, 4)
 
-    xy = np.array(np.meshgrid(np.arange(dst_size),np.arange(dst_size))).T.reshape(-1, 2)
+    xy = np.array(np.meshgrid(np.arange(dst_size), np.arange(dst_size))).T.reshape(-1, 2)
     if not colinear:
-        cylinder_dst = project_to_cylinder2(xy, cil_cen, cil_rad)
+        cylinder_dst = project_to_cylinder(xy, cil_cen, cil_rad)
     else:
         cylinder_dst = np.vstack((xy[:, 0], xy[:, 1], np.full_like(xy[:, 0], ellipse_radius))).T
     cylinder_dst = np.hstack((cylinder_dst, np.ones([cylinder_dst.shape[0], 1])))
@@ -231,11 +161,20 @@ def cylindrical_transformation(qr: QRCode, src: np.ndarray, dst: np.ndarray, ide
 
 
 def tps_transformation(_: QRCode, src: np.ndarray, dst: np.ndarray, ideal_qr: IdealQRCode):
+    """
+    Build the TPS inverse mapping of the correction between the given references
+
+    :param _: The QRCode object, not needed by this method
+    :param src: The source reference points
+    :param dst: The destiny reference points
+    :param ideal_qr: The ideal QR object that we want to achieve at the destiny
+
+    :return: The inverse mapping transformation
+    """
     dst_size = ideal_qr.size
     tps_inv_tps_m = ThinPlateSpline(
         source_landmarks=dst[:, ::-1],
-        destiny_landmarks=src[:, ::-1],
-        # smooth=1
+        destiny_landmarks=src[:, ::-1]
     )
 
     markers = np.stack(np.meshgrid(np.arange(dst_size), np.arange(dst_size)), axis=2)
@@ -246,11 +185,21 @@ def tps_transformation(_: QRCode, src: np.ndarray, dst: np.ndarray, ideal_qr: Id
 def double_tps(qr: QRCode, bitpixel: int, border: int,
                _: Optional[List[MatchingFeatures]] = None,
                simple: bool = False):
+    """
+    Transformation which makes a doble TPS transformations, with a relocaliztion in the middle
+
+    :param qr: A QRCode object
+    :param bitpixel: The number of pixels per module that we want in the output of the correction
+    :param border: The number of modules of border that we want in the correction
+    :param _: selected matching features, which get ignored by this method
+    :param simple: Whether to use simple or complex relocalization of features
+
+    :return: The corrected QRCode
+    """
     first_tps_features = [
         MatchingFeatures.FINDER_CENTERS,
         MatchingFeatures.FINDER_CORNERS,
-        MatchingFeatures.ALIGNMENTS_CENTERS,
-        # MatchingFeatures.FOURTH_CORNER
+        MatchingFeatures.ALIGNMENTS_CENTERS
     ]
     second_tps_features = [
         MatchingFeatures.FINDER_CENTERS,
@@ -278,15 +227,14 @@ def double_tps(qr: QRCode, bitpixel: int, border: int,
     return qr
 
 
+# The dictionary which ties each identifier to their respective functions
 _CORRECTION_METHOD_FUNC = {
     Correction.AFFINE: general_correction(
         is_lineal=True,
         build_transformation_function=affine_correction,
         default_references_features=[
             MatchingFeatures.FINDER_CENTERS,
-            # MatchingFeatures.FINDER_CORNERS,
-            MatchingFeatures.ALIGNMENTS_CENTERS,
-            # MatchingFeatures.FOURTH_CORNER
+            MatchingFeatures.ALIGNMENTS_CENTERS
         ]
     ),
     Correction.PROJECTIVE: general_correction(
@@ -295,8 +243,7 @@ _CORRECTION_METHOD_FUNC = {
         default_references_features=[
             MatchingFeatures.FINDER_CENTERS,
             MatchingFeatures.FINDER_CORNERS,
-            MatchingFeatures.ALIGNMENTS_CENTERS,
-            # MatchingFeatures.FOURTH_CORNER
+            MatchingFeatures.ALIGNMENTS_CENTERS
         ]
     ),
     Correction.CYLINDRICAL: general_correction(
@@ -305,8 +252,7 @@ _CORRECTION_METHOD_FUNC = {
         default_references_features=[
             MatchingFeatures.FINDER_CENTERS,
             MatchingFeatures.FINDER_CORNERS,
-            MatchingFeatures.ALIGNMENTS_CENTERS,
-            # MatchingFeatures.FOURTH_CORNER
+            MatchingFeatures.ALIGNMENTS_CENTERS
         ]
     ),
     Correction.TPS: general_correction(
@@ -315,8 +261,7 @@ _CORRECTION_METHOD_FUNC = {
         default_references_features=[
             MatchingFeatures.FINDER_CENTERS,
             MatchingFeatures.FINDER_CORNERS,
-            MatchingFeatures.ALIGNMENTS_CENTERS,
-            # MatchingFeatures.FOURTH_CORNER
+            MatchingFeatures.ALIGNMENTS_CENTERS
         ]
     ),
     Correction.DOUBLE_TPS: double_tps
@@ -325,6 +270,17 @@ _CORRECTION_METHOD_FUNC = {
 
 def correction(qr: QRCode, method: Optional[Correction] = None, bitpixel: int = 11, border: int = 15,
                **kwargs) -> QRCode:
+    """
+    Given a QRCode and a selected method of correction applies the correction to the QR Code
+
+    :param qr: A QRCode object
+    :param method: A identifier of the method of correction that we want to use
+    :param bitpixel: The number of pixels per module that we want in the output of the correction
+    :param border: The number of modules of border that we want in the correction
+    :param kwargs: Keyword arguments to the selected correction function
+
+    :return: The corrected QRCode object
+    """
     if method is None:
         method = Correction.PROJECTIVE
 

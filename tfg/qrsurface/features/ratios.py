@@ -1,21 +1,34 @@
-from typing import Tuple, List, Optional
+import itertools
+from typing import Tuple, List, Optional, Union
 
 import numpy as np
 
 from .utils import get_contours_with_center
 
 
-def centerFromEnd(arr, beg):
+def center_from_end(arr: Union[np.ndarray, List], beg: int) -> int:
+    """
+    Get the center of a pattern given an array of ratios and the beginning pixel
+
+    :param arr: Array of ratios
+    :param beg: The beginning pixel
+
+    :return: Middle pixel
+    """
     middle = len(arr) // 2
     return beg + sum(arr[:middle]) + arr[middle] // 2
 
 
-def centerFromEnd2(arr, beg):
-    middle = len(arr) // 2
-    return beg + sum(arr[:middle]) + arr[middle] // 2
+def check_general_ratio(ratios: List, widths: List, strict_border: bool) -> bool:
+    """
+    Checks if the widths given follow the ratios
 
+    :param ratios: List of ratios
+    :param widths: Widths of the sequences of pixels
+    :param strict_border: Whether to use a strict border
 
-def check_general_ratio(ratios, widths, strict_border: bool) -> bool:
+    :return: Whether the given widths follow the ratios given
+    """
     if strict_border:
         size = sum(widths)
         lenght = sum(ratios)
@@ -48,28 +61,15 @@ def check_general_ratio(ratios, widths, strict_border: bool) -> bool:
 
 
 def compute_widths_by_row(row: np.ndarray) -> Tuple[List, List]:
-    # line_val = []
-    # line_rep = []
-    # last = None
-    # rep = 0
-    # for j, first in enumerate(row):
-    #     if last is None:
-    #         last = first
-    #         line_val.append([first, j])
-    #         line_rep.append(1)
-    #     elif last == first:
-    #         line_rep[rep] += 1
-    #     else:
-    #         last = first
-    #         line_val.append([first, j])
-    #         line_rep.append(1)
-    #         rep += 1
+    """
+    Given a row, computes the sequences of successive pixels
 
-    # nline_rep = np.diff(np.where(np.concatenate(([row[0]],
-    #                                              row[:-1] != row[1:],
-    #                                              [True])))[0])[::2]
-    import itertools
+    :param row: A array of binarized colors
+
+    :return: An array of the values of the sequences and the widths of the sequences
+    """
     nline_rep = [sum(1 for _ in group) for key, group in itertools.groupby(row)]
+    nline_val: np.ndarray
     if not row[0]:
         nline_val = np.ones_like(nline_rep)
         nline_val[::2] = 0.
@@ -77,23 +77,27 @@ def compute_widths_by_row(row: np.ndarray) -> Tuple[List, List]:
         nline_val = np.zeros_like(nline_rep)
         nline_val[::2] = 1.
 
-    nline_val = nline_val.tolist()
+    # noinspection PyTypeChecker
+    line_val: List = nline_val.tolist()
     acc = 0
     for i, rep in enumerate(nline_rep):
-        nline_val[i] = [bool(nline_val[i]), acc]
+        line_val[i] = [bool(line_val[i]), acc]
         acc += rep
 
-    # print(row[-30:].tolist())
-    # print(nline_rep)
-    # print(line_rep)
-    # print(nline_val)
-    # print(line_val)
-
-    # return line_val, line_rep
-    return nline_val, nline_rep
+    return line_val, nline_rep
 
 
-def cross_check(data, row, iratios, strict_border: bool) -> Optional[int]:
+def cross_check(data: np.ndarray, row: int, iratios: List, strict_border: bool) -> Optional[int]:
+    """
+    Checks if the found center complies with the ratios in different orientations
+
+    :param data: The target orientation array to check the ratios
+    :param row: The current row number
+    :param iratios: The array os ratios to search for
+    :param strict_border: Whether the pattern has strict border
+
+    :return: The found column for the center
+    """
     len_side = len(iratios) // 2 + 2
 
     changes_v = []
@@ -156,26 +160,39 @@ def cross_check(data, row, iratios, strict_border: bool) -> Optional[int]:
 
     if strict_border:
         widths = th
-        new_center = centerFromEnd2(widths, changesd_v[-1][1])
+        new_center = center_from_end(widths, changesd_v[-1][1])
     else:
         widths = th[1:-1]
-        new_center = centerFromEnd2(widths, changesd_v[-2][1])
+        new_center = center_from_end(widths, changesd_v[-2][1])
 
     return new_center
 
 
-def handle_possible_center(img, row, centerCol, iratios, strict_border, diagonals=True):
-    centerRow = cross_check(img[:, centerCol], row, iratios, strict_border)
-    if centerRow is None:
+def handle_possible_center(img: np.ndarray, row: int, center_col: int, iratios: List, strict_border: bool,
+                           diagonals: bool = True) -> Optional[Tuple[int, int]]:
+    """
+    Test whether a possible center is a valid pattern
+
+    :param img: The image where we are searching for patterns
+    :param row: The row where the center was found
+    :param center_col: The column that indicates what pixel was the possible center
+    :param iratios: The array os ratios to search for
+    :param strict_border: Whether the pattern has strict border
+    :param diagonals: Whether to check the diagonals
+
+    :return: The coordinates of the center or None
+    """
+    center_row = cross_check(img[:, center_col], row, iratios, strict_border)
+    if center_row is None:
         return None
 
-    centerCol = cross_check(img[centerRow, :], centerCol, iratios, strict_border)
-    if centerCol is None:
+    center_col = cross_check(img[center_row, :], center_col, iratios, strict_border)
+    if center_col is None:
         return None
 
     if diagonals:
-        d = max(centerRow, centerCol) - min(centerRow, centerCol)
-        if centerRow >= centerCol:
+        d = max(center_row, center_col) - min(center_row, center_col)
+        if center_row >= center_col:
             diag1_start = d
             diag2_start = 0
             f = min(img.shape[0] - 1 - d, img.shape[1] - 1)
@@ -198,83 +215,89 @@ def handle_possible_center(img, row, centerCol, iratios, strict_border, diagonal
         diag1 = list(range(diag1_start, diag1_end))
         diag2 = list(range(diag2_start, diag2_end))
 
-        # plt.figure()
-        # plt.imshow(img)
-        # plt.scatter(centerCol, centerRow)
-        # plt.plot(diag2[:min(len(diag1), len(diag2))], diag1[:min(len(diag1), len(diag2))])
-        # plt.show()
-
-        index = max(centerRow, centerCol) - d
+        index = max(center_row, center_col) - d
         check = cross_check(img[diag1, diag2], index, iratios, strict_border)
         if check is None:
             return None
 
-        inv_col = img.shape[1] - 1 - centerCol
-        if centerRow >= inv_col:
-            diag1_inv_start = centerRow - inv_col
+        inv_col = img.shape[1] - 1 - center_col
+        if center_row >= inv_col:
+            diag1_inv_start = center_row - inv_col
             diag2_inv_start = img.shape[1] - 1
-            if img.shape[1] + centerRow - inv_col >= img.shape[0]:
+            if img.shape[1] + center_row - inv_col >= img.shape[0]:
                 diag1_inv_end = img.shape[0] - 1
-                diag2_inv_end = img.shape[1] - 1 - ((img.shape[0] - 1) - (centerRow - inv_col))
+                diag2_inv_end = img.shape[1] - 1 - ((img.shape[0] - 1) - (center_row - inv_col))
             else:
-                diag1_inv_end = img.shape[1] - 1 + centerRow - inv_col
+                diag1_inv_end = img.shape[1] - 1 + center_row - inv_col
                 diag2_inv_end = 0
         else:
             diag1_inv_start = 0
-            diag2_inv_start = centerCol + centerRow
-            if centerCol + centerRow >= img.shape[0]:
+            diag2_inv_start = center_col + center_row
+            if center_col + center_row >= img.shape[0]:
                 diag1_inv_end = img.shape[0] - 1
-                diag2_inv_end = centerCol + centerRow - (img.shape[0] - 1)
+                diag2_inv_end = center_col + center_row - (img.shape[0] - 1)
             else:
-                diag1_inv_end = centerCol + centerRow
+                diag1_inv_end = center_col + center_row
                 diag2_inv_end = 0
         diag1_inv = list(range(diag1_inv_start, diag1_inv_end + 1))
         diag2_inv = list(range(diag2_inv_start, diag2_inv_end - 1, -1))
 
-        # plt.figure()
-        # plt.imshow(img)
-        # plt.scatter(centerCol, centerRow)
-        # plt.plot(diag2, diag1)
-        # plt.plot(diag2_inv[:min(len(diag2_inv), len(diag1_inv))], diag1_inv[:min(len(diag2_inv), len(diag1_inv))])
-        # plt.show()
-
-        index = min(inv_col, centerRow)
+        index = min(inv_col, center_row)
         check = cross_check(img[diag1_inv, diag2_inv], index, iratios, strict_border)
         if check is None:
-           return None
+            return None
 
-    return centerRow, centerCol
+    return center_row, center_col
 
 
-def check_contours(bw_image, centerRow, centerCol, hratios, strict_border):
-    cands = get_contours_with_center(bw_image, np.array([centerRow, centerCol]), hratios, hratios)
+def check_contours(bw_image: np.ndarray, center_row: int, center_col: int, hratios: List,
+                   strict_border: bool) -> Optional[Tuple[int, int]]:
+    """
+    Checks if the found center has the correct number of contours around
 
-    # print(len(cands), len(hratios))
+    :param bw_image: The binary image where to search the patterns
+    :param center_row: The found center row
+    :param center_col: The found center column
+    :param hratios: The array of found ratios
+    :param strict_border: Whether the pattern has strict border
+
+    :return: The coordinates of the center or None
+    """
+    cands = get_contours_with_center(bw_image, np.array([center_row, center_col]), hratios, hratios)
+
     if strict_border:
-        l = len(hratios) // 2 + 1
+        expected_length = len(hratios) // 2 + 1
     else:
-        l = len(hratios) // 2
+        expected_length = len(hratios) // 2
 
-    if len(cands) < l:
+    if len(cands) < expected_length:
         return None
 
-    return centerRow, centerCol
+    return center_row, center_col
 
 
-def find_general(bw_image: np.ndarray, iratios, center_color: bool,
-                 strict_border: bool, diagonals, countours) -> List[List[np.ndarray]]:
+def find_general(bw_image: np.ndarray, iratios: List, center_color: bool, strict_border: bool, diagonals: bool,
+                 countours: bool) -> List[List[np.ndarray]]:
+    """
+    General method for finding patterns using ratio-based approach
+
+    :param bw_image: The binary image where to search the patterns
+    :param iratios: The array of target ratios
+    :param center_color: The color of the center pixel
+    :param strict_border: Whether the pattern has strict border
+    :param diagonals: Whether to check the diagonals
+    :param countours: Whether to check the contour
+
+    :return: List of found patterns, given by a center and pair of ratios
+    """
     border_color = bool((len(iratios) // 2 + int(center_color)) % 2)
 
     candidates = []
     for i, row in filter(lambda x: x[0] % 4 == 0, enumerate(bw_image)):
         line_val, line_rep = compute_widths_by_row(row)
 
-        # fr = border_color == row[0]
-        # print([val == border_color for val, _ in line_val])
-        # print([(i % 2 == 0) == fr for i, _ in enumerate(line_val)])
         it = filter(
             lambda x: x[1][0] == border_color,
-            # lambda x: (x[0] % 2 == 0) == fr,
             enumerate(line_val)
         )
         for k, (_, idx) in it:
@@ -284,14 +307,6 @@ def find_general(bw_image: np.ndarray, iratios, center_color: bool,
                     and check_general_ratio(iratios, widths, strict_border):
                 candidates.append([i, idx, widths])
 
-    # import matplotlib.pyplot as plt
-    # centers = np.array([[i, centerFromEnd(widths, idx)] for i, idx, widths in candidates])
-    # plt.figure()
-    # plt.gray()
-    # plt.imshow(bw_image)
-    # plt.scatter(*centers[:, ::-1].T)
-    # plt.show()
-
     final_centers = []
     for row, col, widths in candidates:
 
@@ -299,25 +314,19 @@ def find_general(bw_image: np.ndarray, iratios, center_color: bool,
             hratios = widths
         else:
             hratios = widths[1:-1]
-        centerCol = centerFromEnd(widths, col)
+        center_col = center_from_end(widths, col)
         size = sum(hratios)
 
-        if any(abs(centerCol - c[1]) < size and abs(row - c[0]) < size
+        if any(abs(center_col - c[1]) < size and abs(row - c[0]) < size
                for c, _, _ in final_centers):
             continue
 
-        center = handle_possible_center(bw_image, row, centerCol, iratios, strict_border, diagonals=diagonals)
+        center = handle_possible_center(bw_image, row, center_col, iratios, strict_border, diagonals=diagonals)
         if countours:
-            center = check_contours(bw_image, center[0], center[1], hratios, strict_border) if center is not None else None
+            center = (check_contours(bw_image, center[0], center[1], hratios, strict_border)
+                      if center is not None else None)
         if center is not None:
             center = np.array([center[0], center[1]])
             final_centers.append([center, hratios, hratios])
-
-    # import matplotlib.pyplot as plt
-    # plt.figure()
-    # plt.gray()
-    # plt.imshow(bw_image)
-    # plt.scatter(*np.array([c for c, _, _ in final_centers])[:, ::-1].T)
-    # plt.show()
 
     return final_centers

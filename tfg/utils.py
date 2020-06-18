@@ -9,6 +9,14 @@ from tfg.qrsurface import BadModules, Correction, decode, Features, QRCode, QREr
 
 
 def try_decode_with_zbar(labeled_image: LabeledImage, image: np.ndarray) -> Optional[QRErrorId]:
+    """
+    Tries to decode the image with ZBar
+
+    :param labeled_image: A labeled image
+    :param image: The image opened
+
+    :return: Optional error
+    """
     if not labeled_image.has_data:
         return None
 
@@ -28,6 +36,14 @@ def try_decode_with_zbar(labeled_image: LabeledImage, image: np.ndarray) -> Opti
 
 
 def parse_qrs(image: np.ndarray, features: Features) -> List[QRCode]:
+    """
+    Search for QR Codes in the images
+
+    :param image: The image opened
+    :param features: The features found in the image
+
+    :return: List of QRCode found
+    """
     try:
         return list(QRCode.from_features(image, features))
     except Exception:
@@ -36,6 +52,13 @@ def parse_qrs(image: np.ndarray, features: Features) -> List[QRCode]:
 
 
 def check_num_qrs(labeled_image: LabeledImage, features: Features, qrs: List[QRCode]):
+    """
+    Check the number of QR Code found
+
+    :param labeled_image: The labeled image
+    :param features: The features found in the image
+    :param qrs: List of QRCode found
+    """
     if len(qrs) < labeled_image.num_qrs:
         features.plot()
         raise QRErrorId.NOT_ENOUGH_QRS.exception()
@@ -44,6 +67,13 @@ def check_num_qrs(labeled_image: LabeledImage, features: Features, qrs: List[QRC
 
 
 def check_version(labeled_image: LabeledImage, features: Features, qrs: List[QRCode]):
+    """
+    Check the version of the QRCode
+
+    :param labeled_image: The labeled image
+    :param features: The features found in the image
+    :param qrs: List of QRCode found
+    """
     for i, qr in enumerate(qrs):
         if labeled_image.version is not None:
             if labeled_image.qrs[i].deformation == Deformation.SURFACE:
@@ -57,6 +87,13 @@ def check_version(labeled_image: LabeledImage, features: Features, qrs: List[QRC
 
 
 def sort_qrs(qrs: List[QRCode]) -> List[QRCode]:
+    """
+    Sort the list of QRCodes
+
+    :param qrs: List of QRCode found
+
+    :return: Sorted list of QRCode found
+    """
     if len(qrs) == 0:
         return qrs
 
@@ -66,6 +103,17 @@ def sort_qrs(qrs: List[QRCode]) -> List[QRCode]:
 
 def check_correction(labeled_image: LabeledImage, features: Features, qr: QRCode,
                      bitmaps: BitmapCollection, correction: Correction) -> Optional[BadModules]:
+    """
+    Check a correction agaist the QR given
+
+    :param labeled_image: The labeled image
+    :param features: The features found in the image
+    :param qr: Target QRCode
+    :param bitmaps: The collection of bitmaps
+    :param correction: Correction used
+
+    :return: Optional struct of bad modules
+    """
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
     fig.suptitle(f"{labeled_image.path.name} {correction.name}")
 

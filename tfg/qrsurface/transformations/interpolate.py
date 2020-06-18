@@ -9,17 +9,22 @@ N = TypeVar('N', float, np.ndarray)
 
 def thin_plate_rbf(r: N) -> N:
     """
-    TODO
+    Radial basis function of the Thin Plate Splines in 2 dimensions
 
     :param r: A positive real value or array of them
+
     :return: The thin plate RBF of r, with the same type and shape as r
     """
     return xlogy(r ** 2, r)
 
 
 class ThinPlateSpline:
+    """
+    A Thin Plate Spline approximation, which is constructed by two sets of source and destiny landmarks.
+    The application of the interpolated transformation can be applied to one or more points using the call method.
+    """
 
-    def __init__(self, source_landmarks, destiny_landmarks, smooth: float = 0.0):
+    def __init__(self, source_landmarks: np.ndarray, destiny_landmarks: np.ndarray, smooth: float = 0.0) -> None:
         self.src = source_landmarks
         self.dst = destiny_landmarks
         self.smooth = smooth
@@ -38,7 +43,7 @@ class ThinPlateSpline:
 
         self.WA = np.linalg.solve(self.L, self.Y)
 
-    def __call__(self, xa):
+    def __call__(self, xa: np.ndarray) -> np.ndarray:
         w_p = np.concatenate((np.ones((xa.shape[0], 1)), xa), axis=1)
         rep_mat0 = np.tile(xa, (self.src.shape[0], 1, 1))
         rep_mat1 = np.tile(self.src, (xa.shape[0], 1, 1))

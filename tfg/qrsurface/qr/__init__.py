@@ -20,6 +20,9 @@ from .utils import (choose_and_order_alignments, group_finder_patterns, guess_ve
 
 @unique
 class Correction(Enum):
+    """
+    Identifiers of the possible correction methods supported
+    """
     AFFINE = auto()
     PROJECTIVE = auto()
     CYLINDRICAL = auto()
@@ -29,6 +32,10 @@ class Correction(Enum):
 
 @dataclass
 class QRCode:
+    """
+    Representation of a QR Code in a image, with the image, and all the features and information that identifies the
+    QR Code
+    """
     image: np.ndarray
     finder_patterns: OrderedFinderPatterns
     version: int
@@ -41,11 +48,27 @@ class QRCode:
 
     @classmethod
     def from_image(cls, image: np.ndarray, **kwargs) -> Iterator['QRCode']:
+        """
+        Classmethod that creates an iterable of QRCode given an image
+
+        :param image: An image where we want to search for QR Codes
+        :param kwargs: Keyword arguments for the Features.from_image
+
+        :return: An iterable of QRCode
+        """
         features = Features.from_image(image, **kwargs)
         return cls.from_features(image, features)
 
     @classmethod
     def from_features(cls, image: np.ndarray, features: Features) -> Iterator['QRCode']:
+        """
+        Classmethod that creates an iterable of QRCode given an image and it's precomputed features
+
+        :param image: An image where we want to search for QR Codes
+        :param features: The precomputed features find in the image
+
+        :return: An iterable of QRCode
+        """
         all_finder_patterns = copy.deepcopy(features.finder_patterns)
         all_alignment_patterns = copy.deepcopy(features.alignment_patterns)
 
@@ -54,14 +77,11 @@ class QRCode:
 
             ordered_finders = orientate_finder_patterns(finders)
             version = guess_version_from_finders(ordered_finders)
-            # plt.figure()
-            # plt.imshow(image)
             alignment_patterns = choose_and_order_alignments(
                 ordered_finders,
                 version,
                 all_alignment_patterns
             )
-            # plt.show()
 
             fourth_corner = find_fourth_corner(
                 features.bw_image,
@@ -79,10 +99,20 @@ class QRCode:
             )
 
     def update_version(self, version: int) -> None:
+        """
+        Updates the version and the size from the QR Code
+
+        :param version: The new version of the QR Code
+        """
         self.version = version
         self.size = get_size_from_version(self.version)
 
     def get_bounding_box_image(self):
+        """
+        Returns the image of the QR Code cut around the bounding box form by the current found features
+
+        :return: The image cut around the bounding box of the QR Code
+        """
         f1, f2, f3 = self.finder_patterns
         v1 = f2.corners[1] - f1.corners[0]
         v2 = f3.corners[3] - f1.corners[0]
@@ -127,6 +157,13 @@ class QRCode:
         return self.image[bbox[0][0]:bbox[1][0], bbox[0][1]:bbox[1][1]]
 
     def create_references(self, features: List[MatchingFeatures]) -> References:
+        """
+        Given a list of target matching features, returns an object representing the references chosen
+
+        :param features: List of target matching features
+
+        :return: Object representing the references chosen
+        """
         return References(
             features=features,
             alignments_found=[a is not None for a in self.alignment_patterns],
@@ -134,6 +171,13 @@ class QRCode:
         )
 
     def get_references(self, references: References) -> np.ndarray:
+        """
+        Given a selection of target features returns the array of chosen points
+
+        :param references: A selection of target features
+
+        :return: Array of chosen points
+        """
         match_features = self._feature_to_points(references)
 
         return np.concatenate([
@@ -164,34 +208,46 @@ class QRCode:
         }
 
     def correct(self, method: Optional[Correction] = None, **kwargs):
+        """
+        Makes a correction in the QR Code image and features
+
+        :param method: Method of correction used
+        :param kwargs: Keyword arguments for the correct function
+
+        :return: The corrected QR Code
+        """
         from tfg.qrsurface.transformations import correction
         return correction(self, method, **kwargs)
 
     def binarize(self, **kwargs):
+        """
+        Makes a binarization of the QR Code image
+
+        :param kwargs: Keyword arguments for the binarization function
+
+        :return: The binarized QR Code
+        """
         from tfg.qrsurface.transformations import binarization
         return binarization(self, **kwargs)
 
     def decode(self, bounding_box: bool = True, sample: bool = False):
+        """
+        Tries to read the QR code information
+
+        :param bounding_box: Whether to cut the QR Code image before reading
+        :param sample: Whether to use sampling before trying to read
+
+        :return: The data in the QR Code
+        """
         if bounding_box:
             image = self.get_bounding_box_image()
         elif sample:
             qr_sampled = copy.deepcopy(self)
             qr_sampled.binarize()
             qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=5, border=5)
-            # qr_sampled.correct(method=Correction.PROJECTIVE, bitpixel=5, border=5, references_features=[
-            #     MatchingFeatures.FINDER_CENTERS,
-            #     MatchingFeatures.FINDER_CORNERS,
-            #     MatchingFeatures.ALIGNMENTS_CENTERS,
-            #     MatchingFeatures.FOURTH_CORNER
-            # ])
             image = qr_sampled.image
         else:
             image = self.image
-
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.imshow(image)
-        # plt.show()
 
         results = decode(image)
 
@@ -202,6 +258,13 @@ class QRCode:
         return results[0]
 
     def sample(self, method=Correction.PROJECTIVE):
+        """
+        Makes a sampling of the current image
+
+        :param method: The correction method used before the sampling
+
+        :return: A SampledQRCode object
+        """
         qr_sampled = copy.deepcopy(self)
 
         qr_sampled.correct(method=method, bitpixel=5, border=0, simple=True)
@@ -219,6 +282,13 @@ class QRCode:
         )
 
     def plot(self, axes=None, interpolation: Optional[str] = None, show: bool = False):
+        """
+        Plots the current QRCode object and features
+
+        :param axes: Whether to use a given matplotlib axes or create a new one
+        :param interpolation: Which type of interpolation to use in the image plot
+        :param show: Whether to call to the show method of matplotlib
+        """
         finders_centers = np.array([f.center for f in self.finder_patterns])
         aligns_centers = np.array([a.center
                                    for a in self.alignment_patterns
@@ -262,16 +332,32 @@ class QRCode:
 
 @dataclass
 class SampledQRCode:
+    """
+    A sampled QR Code from an input image
+    """
     image: np.ndarray
     version: int
 
     def count_errors(self, original: np.ndarray) -> int:
+        """
+        Counts how many erros has the sampled code comparing with the original
+
+        :param original: The original QR Code grid of modules
+
+        :return: Number of failed modules
+        """
         mask_2d = (img_as_ubyte(color.rgb2gray(self.image)) !=
                    img_as_ubyte(color.rgb2gray(original)))
 
         return len(np.nonzero(mask_2d)[0])
 
     def plot(self, axes=None, show: bool = False) -> None:
+        """
+        Plots the current SampledQRCode object and features
+
+        :param axes: Whether to use a given matplotlib axes or create a new one
+        :param show: Whether to call to the show method of matplotlib
+        """
         if axes is None:
             fig = plt.figure()
             axes = fig.add_subplot(1, 1, 1)
@@ -282,6 +368,13 @@ class SampledQRCode:
             plt.show()
 
     def plot_differences(self, matrix: np.array, axes=None, show: bool = False) -> None:
+        """
+        Plots the comparison between original and sampled QR codes
+
+        :param matrix: The original QR Code grid of modules
+        :param axes: Whether to use a given matplotlib axes or create a new one
+        :param show: Whether to call to the show method of matplotlib
+        """
         if axes is None:
             fig = plt.figure()
             axes = fig.add_subplot(1, 1, 1)
@@ -306,25 +399,16 @@ class SampledQRCode:
             plt.show()
 
     def decode(self):
-        image = color.rgb2gray(self.image)
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.imshow(image)
+        """
+        Tries to read the QR code information
 
-        # size = image.shape[0]
-        # new_image2 = [None] * size
-        #
-        # for row in range(size):
-        #     new_image2[row] = [None] * size
-        #     for col in range(size):
-        #         new_image2[row][col] = False
+        :return: The data in the QR Code
+        """
+        image = color.rgb2gray(self.image)
 
         self._paint_timing_pattern(image, image.shape[0])
-        self._paint_alignment_pattern(image, image.shape[0])
+        self._paint_alignment_pattern(image)
         self._paint_postion_pattern(image, image.shape[0])
-        # plt.figure()
-        # plt.imshow(image)
-        # plt.show()
 
         frame_width = 4
         new_size = (image.shape[0] + 2 * frame_width, image.shape[1] + 2 * frame_width, 3)
@@ -340,11 +424,6 @@ class SampledQRCode:
             multichannel=True
         ))
 
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.imshow(new_image)
-        # plt.show()
-
         results = decode(new_image)
 
         assert len(results) > 0
@@ -353,7 +432,8 @@ class SampledQRCode:
 
         return results[0]
 
-    def _paint_postion_pattern(self, image, size):
+    @staticmethod
+    def _paint_postion_pattern(image, size):
         for row, col in [(0, 0), (size - 7, 0), (0, size - 7)]:
             for r in range(-1, 8):
                 if row + r <= -1 or size <= row + r:
@@ -371,7 +451,7 @@ class SampledQRCode:
                     else:
                         image[row + r][col + c] = 1
 
-    def _paint_alignment_pattern(self, image, size):
+    def _paint_alignment_pattern(self, image):
         pos = get_alignments_centers(self.version)
 
         for i in range(len(pos)):
@@ -385,7 +465,8 @@ class SampledQRCode:
                     else:
                         image[row + r][col + c] = 1
 
-    def _paint_timing_pattern(self, image, size):
+    @staticmethod
+    def _paint_timing_pattern(image, size):
         for r in range(8, size - 8):
             image[r][6] = r % 2
             image[6][r] = r % 2

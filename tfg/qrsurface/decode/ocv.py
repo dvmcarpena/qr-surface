@@ -3,6 +3,13 @@ import numpy as np
 
 
 def image_to_ocvimage(image: np.ndarray) -> np.ndarray:
+    """
+    Converts a RGB image to BGR
+
+    :param image: Image in RGB
+
+    :return: The same image in BGR
+    """
     return image[:, :, ::-1]
 
 

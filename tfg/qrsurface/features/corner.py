@@ -7,13 +7,13 @@ from .utils import create_line_iterator
 
 def rot90_point(point, k: int, shape) -> np.ndarray:
     """
-    Rotate 90 degree's a point inside of a image.
+    Rotate 90 degree's a point inside of a image
 
-    :param point: 2D point to rotate.
-    :param k: Number of 90 degree's rotations to apply.
-    :param shape: Shape of the image.
+    :param point: 2D point to rotate
+    :param k: Number of 90 degree's rotations to apply
+    :param shape: Shape of the image
 
-    :return: The point resulting from the rotation.
+    :return: The point resulting from the rotation
 
     """
     image_h, image_w = shape
@@ -28,7 +28,7 @@ def rot90_point(point, k: int, shape) -> np.ndarray:
 def corner_filter(line: np.ndarray, center: int, corner_radius: int, fuzzy_radius: int, blank_radius: int) -> bool:
     """
     Given a line of pixels, the hipotetic center of a corner, and some parameters that configure the check, returns
-    if there is a corner at that position or not.
+    if there is a corner at that position or not
 
     X := The central pixel in a iteration, that will be extracted as the corner. Will be checked as a activated pixel
     O := The pixels that will be check as activated
@@ -42,13 +42,13 @@ def corner_filter(line: np.ndarray, center: int, corner_radius: int, fuzzy_radiu
     fuzzy_radius ─────────────┘   │
     corner_radius ────────────────┘
 
-    :param line: An array of pixels that will be check for corners.
-    :param center: The index of the pixel that will be check as the center of the corner.
-    :param corner_radius: The radius of pixels that will be check as activated.
-    :param fuzzy_radius: The radius of pixels that won't be check.
-    :param blank_radius: The radius of pixels that will be check as not activated.
+    :param line: An array of pixels that will be check for corners
+    :param center: The index of the pixel that will be check as the center of the corner
+    :param corner_radius: The radius of pixels that will be check as activated
+    :param fuzzy_radius: The radius of pixels that won't be check
+    :param blank_radius: The radius of pixels that will be check as not activated
 
-    :return: If the given line seems to have a corner or not.
+    :return: If the given line seems to have a corner or not
 
     """
     inner_radius = corner_radius + fuzzy_radius + 1
@@ -62,17 +62,17 @@ def corner_scan(image_threshold: np.ndarray, corner: int = 0, corner_radius: int
                 fuzzy_radius: int = 0, blank_radius: int = 0) -> Optional[np.ndarray]:
     """
     Method that given a image search for corners beginning from one of the four corners of the
-    image.
+    image
 
-    :param image_threshold: Image thresholded.
-    :param corner: From which of the four corners of the image begin to search.
+    :param image_threshold: Image thresholded
+    :param corner: From which of the four corners of the image begin to search
     :param corner_radius: The radius of pixels around a hipotetic corner in a diagonal line that will be check
-        as activated.
-    :param fuzzy_radius: The radius of pixels around a hipotetic corner in a diagonal line that won't be check.
+        as activated
+    :param fuzzy_radius: The radius of pixels around a hipotetic corner in a diagonal line that won't be check
     :param blank_radius: The radius of pixels around a hipotetic corner in a diagonal line that will be check
-        as not activated.
+        as not activated
 
-    :return: The point found or None if not found.
+    :return: The point found or None if not found
 
     """
     assert isinstance(image_threshold, np.ndarray)

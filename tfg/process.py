@@ -1,7 +1,6 @@
 import copy
 from pathlib import Path
 from pprint import pprint
-from typing import List
 
 import matplotlib.pyplot as plt
 
@@ -10,9 +9,71 @@ from tfg.datasets import LabeledImage, BitmapCollection
 from tfg.utils import check_correction, check_num_qrs, check_version, parse_qrs, sort_qrs, try_decode_with_zbar
 
 
-def process_results(target_images: List[LabeledImage], corrections: List[Correction], images_dir: Path,
-                    update: bool = False, show_diff: bool = True, plot_all: bool = False, plot_success: bool = False,
-                    plot_localization_errors: bool = False, plot_correction_errors: bool = False) -> None:
+def process_results(images_dir: Path, update: bool = False, show_diff: bool = True, plot_all: bool = False,
+                    plot_success: bool = False, plot_localization_errors: bool = False,
+                    plot_correction_errors: bool = False) -> None:
+    """
+    Searches for datasets in the path given and produces results for all the images in them
+
+    :param images_dir: Root path for searching for datasets
+    :param update: Whether to update the saved results
+    :param show_diff: Show the differences between this execution and the last saved
+    :param plot_all: Whether to plot all images
+    :param plot_success: Whether to plot images without errors
+    :param plot_localization_errors:  Whether to plot images with localization errors
+    :param plot_correction_errors: Whether to plot images with correction errors
+    """
+
+    def filter_func(labeled_image: LabeledImage) -> bool:
+        return (
+            # labeled_image.dataset == "flat"
+            labeled_image.dataset == "random"
+            # labeled_image.datasety == "synthetic_small"
+            # labeled_image.dataset in ["flat", "random", "synthetic_small"]
+            # and labeled_image.localization_error is None
+            # and labeled_image.has_error()
+            # and not labeled_image.has_error()
+            # and labeled_image.version == 7
+            # and labeled_image.num_qrs > 1
+            # and labeled_image.num_qrs == 1
+            # and all(
+            #     qr.deformation == Deformation.PERSPECTIVE
+            #     for qr in labeled_image.qrs
+            # )
+            # and all(
+            #     qr.deformation == Deformation.AFFINE
+            #     for qr in labeled_image.qrs
+            # )
+            # and all(
+            #     qr.deformation == Deformation.PERSPECTIVE or qr.deformation == Deformation.AFFINE
+            #     for qr in labeled_image.qrs
+            # )
+            # and all(
+            #     qr.deformation == Deformation.CYLINDRIC
+            #     for qr in labeled_image.qrs
+            # )
+            # and all(
+            #     qr.deformation == Deformation.SURFACE
+            #     for qr in labeled_image.qrs
+            # )
+            # and any(
+            #     items == QRErrorId.WRONG_PIXELS
+            #     for qr in labeled_image.qrs
+            #     if qr.correction_error is not None
+            #     for items in qr.correction_error.values()
+            # )
+        )
+
+    corrections = [
+        Correction.AFFINE,
+        Correction.PROJECTIVE,
+        Correction.CYLINDRICAL,
+        Correction.TPS,
+        # Correction.DOUBLE_TPS
+    ]
+
+    target_images = LabeledImage.search_labeled_images(images_dir, filter_func=filter_func)
+
     bitmaps = BitmapCollection(images_dir)
 
     if show_diff:
@@ -37,7 +98,6 @@ def process_results(target_images: List[LabeledImage], corrections: List[Correct
         print(f"{i + 1:02d}/{total} - {short_path}")
 
         image = labeled_image.read_image()
-        updated = False
         try:
             zbar_err = try_decode_with_zbar(labeled_image, image)
 

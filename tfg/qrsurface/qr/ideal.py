@@ -7,6 +7,10 @@ from ..utils import get_alignments_centers, get_size_from_version
 
 
 class IdealQRCode:
+    """
+    A ideal QR Code collection of patterns, with the points that correspond to all the features that we could find
+    in the localization. Used to create the destiny references
+    """
 
     def __init__(self, version: int, bitpixel: int, border: int):
         assert isinstance(version, int)
@@ -19,11 +23,6 @@ class IdealQRCode:
 
         size = get_size_from_version(self.version)
         self.size = (size + 2 * self.border) * self.bitpixel
-        # self.finders_centers = self._apply_dimensions(np.array([
-        #     [3.5, 3.5],
-        #     [size - 1 - 2.5, 3.5],
-        #     [3.5, size - 1 - 2.5]
-        # ])).astype(dtype=int)
         self.finders_centers = self._apply_dimensions(np.array([
             [3, 3],
             [size - 1 - 3, 3],
@@ -55,9 +54,21 @@ class IdealQRCode:
             self.alignments_centers = self._apply_dimensions(alignments_centers) + np.array([bitpixel / 2]).astype(int)
         else:
             self.alignments_centers = np.array(alignments_centers)
-        self.fourth_corner = (np.array([size, size]) + np.array([self.border, self.border])) * self.bitpixel - np.array([1, 1])
+        self.fourth_corner = (
+            (np.array([size, size]) + np.array([self.border, self.border]))
+            * self.bitpixel
+            - np.array([1, 1])
+        )
 
     def get_references(self, references: References) -> np.ndarray:
+        """
+        Given a object references that chooses which type of references have been selected, returns the array of
+        reference points
+
+        :param references: A selector of the type of target references
+
+        :return: Array of reference points
+        """
         match_features = self._feature_to_points(references)
 
         return np.concatenate([

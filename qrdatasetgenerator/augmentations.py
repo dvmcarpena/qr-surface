@@ -10,12 +10,13 @@ from tqdm import tqdm
 
 
 def img_aug(image: np.array, targets: np.array) -> np.array:
-    """Performs random augmentations on the image using imgaug's augmentations.
+    """
+    Performs random augmentations on the image using imgaug's augmentations.
 
-    Args:
-        image: Image to be augmented.
-        targets: Bounding boxes. Format of the targets: [[x, y, width, height]]
+    :param image: Image to be augmented
+    :param targets: Bounding boxes. Format of the targets: [[x, y, width, height]]
 
+    :return: A new augmented and the bounding box containing th augmented QR Code
     """
     img_x, img_y = image.shape[1], image.shape[2]
     bbs = BoundingBoxesOnImage([
@@ -50,8 +51,10 @@ def img_aug(image: np.array, targets: np.array) -> np.array:
     return aug_img, targets
 
 
+# Parameters of the augmentation
 NUM_AUGS = 20
 
+# Creation of target folders
 images_folder = Path("dataset/images")
 qr_labels = Path("dataset/annotations")
 yolo_labels = Path("dataset/yolo")
@@ -60,6 +63,7 @@ aug_images = Path("dataset/images")
 aug_images.mkdir(exist_ok=True, parents=True)
 
 for p in tqdm(base_images):
+    # Read the template images
     image = np.array(imageio.imread(str(p)))
     label = (yolo_labels / f"{p.stem}.txt").read_text()
     bbox = list(map(float, label.split(" ")[1:]))
@@ -67,6 +71,7 @@ for p in tqdm(base_images):
     i = 0
     while i < NUM_AUGS:
         try:
+            # For each template image do aygmentations and save them with metadata
             new_image, result_bbox = img_aug(image, [bbox])
             augname = f"{p.stem}_{i}"
             imageio.imwrite(str(aug_images / f"{augname}.jpg"), new_image, format="JPEG-PIL", quality=95)

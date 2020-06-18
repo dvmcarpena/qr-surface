@@ -1,82 +1,80 @@
 import copy
-from pprint import pprint
-from typing import List
+from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+# from matplotlib.figure import Figure, Axes
 
 from tfg.qrsurface import Correction, QRErrorId
-from tfg.datasets import LabeledImage
+from tfg.datasets import LabeledImage, Deformation
 
+IMAGE_ID = "image_id"
 LOCALIZATION = "loc"
+LOC_ERROR = "loc_error"
 DATASET = "dataset"
-DATASET_FLAT = "colorsensing"
-DATASET_RAND = "colorsensing2"
+DATASET_FLAT = "flat"
+DATASET_RAND = "random"
 DATASET_SYNT = "synthetic_small"
 ZBAR = "zbar"
+DEFORMATION = "deformation"
 READ_AFF = "read_affine"
 READ_PRO = "read_projective"
 READ_CYL = "read_cylindrical"
 READ_TPS = "read_tps"
+RESULTS_DIR = Path("data/results")
 
 
-def read_results(target_images: List[LabeledImage], corrections: List[Correction]) -> None:
-    # relative: bool = False
-    # relative_percent: bool = True
-    # precision: int = 4
-    # localization_errors = [
-    #     QRErrorId.ERROR_FEATURES,
-    #     QRErrorId.NOT_ENOUGH_QRS,
-    #     QRErrorId.WRONG_VERSION
-    # ]
-    # correction_errors = [
-    #     QRErrorId.CANT_READ,
-    #     QRErrorId.BAD_DATA,
-    #     QRErrorId.WRONG_PIXELS
-    # ]
-    # localization = {
-    #     err_id: 0
-    #     for err_id in map(lambda e: e.name, localization_errors)
-    # }
-    # results = {
-    #     correction: {
-    #         err_id: 0
-    #         for err_id in map(lambda e: e.name, correction_errors)
-    #     }
-    #     for correction in map(lambda e: e.name, corrections)
-    # }
-    #
-    # for correction in map(lambda e: e.name, corrections):
-    #     results[correction]["GOOD"] = 0
+def read_results(images_dir: Path) -> None:
+    """
+    Given a root path with datasets, reads all the last execution results and produces some meaningful output
 
-    # Building the DataFrame with all the data -------------------------------------------------------------------------
+    :param images_dir: Root path for searching for datasets
+    """
+    target_images = LabeledImage.search_labeled_images(images_dir)
+    corrections = [
+        Correction.AFFINE,
+        Correction.PROJECTIVE,
+        Correction.CYLINDRICAL,
+        Correction.TPS,
+        # Correction.DOUBLE_TPS
+    ]
 
-    d = {}
-    d["image_id"] = [
-        labeled_image.image_id
-        for labeled_image in target_images
-        for _ in range(labeled_image.num_qrs)
-    ]
-    d[DATASET] = [
-        labeled_image.dataset
-        for labeled_image in target_images
-        for _ in range(labeled_image.num_qrs)
-    ]
-    d[LOCALIZATION] = [
-        labeled_image.localization_error is None
-        for labeled_image in target_images
-        for _ in range(labeled_image.num_qrs)
-    ]
-    d["loc_error"] = [
-        labeled_image.localization_error.name if labeled_image.localization_error is not None else None
-        for labeled_image in target_images
-        for _ in range(labeled_image.num_qrs)
-    ]
-    d[ZBAR] = [
-        labeled_image.zbar and labeled_image.zbar_error is None
-        for labeled_image in target_images
-        for _ in range(labeled_image.num_qrs)
-    ]
+    # Building the DataFrame with all the data =========================================================================
+
+    d = {
+        IMAGE_ID: [
+            labeled_image.image_id
+            for labeled_image in target_images
+            for _ in range(labeled_image.num_qrs)
+        ],
+        DATASET: [
+            labeled_image.dataset
+            for labeled_image in target_images
+            for _ in range(labeled_image.num_qrs)
+        ],
+        LOCALIZATION: [
+            labeled_image.localization_error is None
+            for labeled_image in target_images
+            for _ in range(labeled_image.num_qrs)
+        ],
+        LOC_ERROR: [
+            labeled_image.localization_error.name if labeled_image.localization_error is not None else None
+            for labeled_image in target_images
+            for _ in range(labeled_image.num_qrs)
+        ],
+        ZBAR: [
+            labeled_image.zbar and labeled_image.zbar_error is None
+            for labeled_image in target_images
+            for _ in range(labeled_image.num_qrs)
+        ],
+        DEFORMATION: [
+            qr.deformation if qr is not None else None
+            for labeled_image in target_images
+            for qr in (labeled_image.qrs if labeled_image.num_qrs != 0 else [None])
+        ]
+    }
+
     read = {
         correction: []
         for correction in map(lambda e: e.name, corrections)
@@ -85,13 +83,11 @@ def read_results(target_images: List[LabeledImage], corrections: List[Correction
     num_errors = copy.deepcopy(read)
     rel_errors = copy.deepcopy(read)
     for labeled_image in target_images:
-        if labeled_image.num_qrs == 0:
-            print("ZERO", labeled_image.image_id)
         if labeled_image.localization_error is None and labeled_image.num_qrs != 0:
             assert len(labeled_image.qrs) == labeled_image.num_qrs
 
             for i, qr in enumerate(labeled_image.qrs):
-                assert len(qr.correction_error.keys()) == 5
+                assert len(qr.correction_error.keys()) == 5 or len(qr.correction_error.keys()) == 4
                 for correction in qr.correction_error.keys():
                     try:
                         read[correction.name].append(qr.correction_error[correction] is not QRErrorId.CANT_READ)
@@ -115,58 +111,88 @@ def read_results(target_images: List[LabeledImage], corrections: List[Correction
         d[f"num_errors_{id}"] = num_errors[correction.name]
         d[f"rel_errors_{id}"] = rel_errors[correction.name]
 
+    corrections_labels = [correction.name[:3] for correction in corrections]
     df = pd.DataFrame(d)
     # print(df)
 
-    # Analysing the results and producing outputs ----------------------------------------------------------------------
+    # Analysing the results and producing outputs ======================================================================
+
+    df_loc = df[df[LOCALIZATION]]
+    total = df[IMAGE_ID].count()
+    total_images = df[IMAGE_ID].drop_duplicates().count()
+    total_loc = df[LOCALIZATION].sum()
+
+    # Parameters of the experiments ------------------------------------------------------------------------------------
+    print("Parameters of the experiments:")
+    print(f" - Number of images:\t\t\t\t\t\t\t{total_images}")
+    print(f" - Number of qrs:\t\t\t\t\t\t\t\t{total}")
+
+    def count_images_and_qrs(name: str, dataset: str) -> None:
+        num_images = df[df[DATASET] == dataset][IMAGE_ID].drop_duplicates().count()
+        num_qrs = df[df[DATASET] == dataset][IMAGE_ID].count()
+        print(f" - Number of images in the {name} dataset:\t\t{num_images}")
+        print(f" - Number of qrs in the {name} dataset:\t\t\t{num_qrs}")
+        del num_images
+        del num_qrs
+
+    count_images_and_qrs("flat", DATASET_FLAT)
+    count_images_and_qrs("rand", DATASET_RAND)
+    count_images_and_qrs("synt", DATASET_SYNT)
+
+    # Results of the experiments ---------------------------------------------------------------------------------------
+    print("Results:")
+    print(f" - Number of localized qrs:\t\t\t\t\t\t{total_loc}")
+    print(f" - Relative localized qrs:\t\t\t\t\t\t{total_loc / total}")
+
+    t = df[df[DATASET] == DATASET_FLAT][IMAGE_ID].count()
+    t_loc = df_loc[df_loc[DATASET] == DATASET_FLAT][IMAGE_ID].count()
+    t_z = df[(df[DATASET] == DATASET_FLAT) & df[ZBAR]][IMAGE_ID].count()
+    print(f" - Number of localized qrs in the flat dataset:\t{t_loc}")
+    print(f" - Relative localized qrs in the flat dataset:\t{t_loc / t}")
+    print(f" - Relative localized qrs in the flat dataset:\t{t_z / t}")
+
+    t = df[df[DATASET] == DATASET_RAND][IMAGE_ID].count()
+    t_loc = df_loc[df_loc[DATASET] == DATASET_RAND][IMAGE_ID].count()
+    t_z = df[(df[DATASET] == DATASET_RAND) & df[ZBAR]][IMAGE_ID].count()
+    print(f" - Number of localized qrs in the rand dataset:\t{t_loc}")
+    print(f" - Relative localized qrs in the rand dataset:\t{t_loc / t}")
+    print(f" - Relative localized qrs in the rand dataset:\t{t_z / t}")
+
+    t = df[df[DATASET] == DATASET_SYNT][IMAGE_ID].count()
+    t_loc = df_loc[df_loc[DATASET] == DATASET_SYNT][IMAGE_ID].count()
+    t_z = df[(df[DATASET] == DATASET_SYNT) & df[ZBAR]][IMAGE_ID].count()
+    print(f" - Number of localized qrs in the synt dataset:\t{t_loc}")
+    print(f" - Relative localized qrs in the synt dataset:\t{t_loc / t}")
+    print(f" - Relative localized qrs in the synt dataset:\t{t_z / t}")
+
+    t = df[df[DATASET] == DATASET_FLAT][IMAGE_ID].count()
+
+    def print_num_reads(name: str, num_reads: int) -> None:
+        print(f" - Number of read qrs by {name}:\t\t\t\t\t{num_reads}")
+        print(f" - Relative read qrs by {name}:\t\t\t\t\t{num_reads / total}")
+        print(f" - Relative localized read qrs by {name}:\t\t\t{num_reads / total_loc}")
+
+    num_reads_zbar = df[ZBAR].sum()
+    print(f" - Number of read qrs by zbar:\t\t\t\t\t{num_reads_zbar}")
+    print(f" - Relative read qrs by zbar:\t\t\t\t\t{num_reads_zbar / total}")
+    num_reads_zbar = df_loc[ZBAR].sum()
+    print(f" - Relative localized read qrs by zbar:\t\t\t{num_reads_zbar / total_loc}")
+    del num_reads_zbar
+
+    print_num_reads("AFF", df[READ_AFF].sum())
+    print_num_reads("PRO", df[READ_PRO].sum())
+    print_num_reads("CYL", df[READ_CYL].sum())
+    print_num_reads("TPS", df[READ_TPS].sum())
+
+    print(f" - Relative read qrs by PRO in flat:\t\t\t\t\t{df[df[DATASET] == DATASET_FLAT][READ_PRO].sum() / t}")
 
     # with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
     #     # print(df.describe())
-
-    total = df["image_id"].count()
-    total_loc = df[LOCALIZATION].sum()
-
-    print("Parameters of the experiments:")
-    print(f" - Number of images:\t\t\t\t\t\t\t{total}")
-
-    num_images_flat = df[df[DATASET] == DATASET_FLAT][DATASET].count()
-    print(f" - Number of images in the flat dataset:\t\t{num_images_flat}")
-
-    num_images_rand = df[df[DATASET] == DATASET_RAND][DATASET].count()
-    print(f" - Number of images in the random dataset:\t\t{num_images_rand}")
-
-    num_images_synt = df[df[DATASET] == DATASET_SYNT][DATASET].count()
-    print(f" - Number of images in the synthetic dataset:\t{num_images_synt}")
-
-    print("Results:")
-    print(f" - Number of localized images:\t\t\t\t\t{total_loc}")
-    print(f" - Relative localized images:\t\t\t\t\t{total_loc / total}")
-
-    num_reads_zbar = df[ZBAR].sum()
-    print(f" - Number of read images by zbar:\t\t\t\t{num_reads_zbar}")
-    print(f" - Relative read images by zbar:\t\t\t\t{num_reads_zbar / total}")
-
-    num_reads_aff = df[READ_AFF].sum()
-    print(f" - Number of read images by AFF:\t\t\t\t{num_reads_aff}")
-    print(f" - Relative read images by AFF:\t\t\t\t\t{num_reads_aff / total}")
-
-    num_reads_pro = df[READ_PRO].sum()
-    print(f" - Number of read images by PRO:\t\t\t\t{num_reads_pro}")
-    print(f" - Relative read images by PRO:\t\t\t\t\t{num_reads_pro / total}")
-
-    num_reads_cyl = df[READ_CYL].sum()
-    print(f" - Number of read images by CYL:\t\t\t\t{num_reads_cyl}")
-    print(f" - Relative read images by CYL:\t\t\t\t\t{num_reads_cyl / total}")
-
-    num_reads_tps = df[READ_TPS].sum()
-    print(f" - Number of read images by TPS:\t\t\t\t{num_reads_tps}")
-    print(f" - Relative read images by TPS:\t\t\t\t\t{num_reads_tps / total}")
 
     # h = {
     #     correction.name[:3]: []
     #     for correction in corrections
     # }
-    # df_loc = df[df[LOCALIZATION]]
     # for correction in corrections:
     #     id = correction.name.lower()
     #     col_id = f"read_{id}"
@@ -178,7 +204,6 @@ def read_results(target_images: List[LabeledImage], corrections: List[Correction
     # # print(h)
     # df3 = pd.DataFrame(h, index=["Fail", "Read", "Read and without errors"])
     #
-    # df_loc = df[df[LOCALIZATION]]
     # for correction in corrections:
     #     id = correction.name.lower()
     #     col_id = f"read_{id}"
@@ -188,95 +213,200 @@ def read_results(target_images: List[LabeledImage], corrections: List[Correction
     # h["ZBAR"] = [df["zbar"].sum(), total - df["zbar"].sum()]
     # # print(h)
     # df3 = pd.DataFrame(h, index=["Fail", "Read"])
-
-    df_loc = df[df[LOCALIZATION]]
-    h = {}
-    h2 = {}
-    r = []
-    r2 = []
-    l = []
-    for correction in corrections:
-        id = correction.name.lower()
-        col_id = f"read_{id}"
-        nread_c = df_loc[df_loc[col_id] == True][col_id].count()
-        r.append(nread_c / total)
-        r2.append(nread_c / total_loc)
-        l.append(correction.name[:3])
-    r.append(df["zbar"].sum() / total)
-    r2.append(df_loc["zbar"].sum() / total_loc)
-    l.append("ZBAR")
-    h["All QRs"] = r
-    h2["QRs localizable by our framework"] = r2
-    # print(h)
-    df3 = pd.DataFrame(h, index=l)
-    df4 = pd.DataFrame(h2, index=l)
-
-    # zbar_col = "zbar"
-    # print(f"zbar: {df[df[zbar_col] == True][zbar_col].count()}")
-
-    labels = []
-    for correction in corrections:
-        id = correction.name.lower()
-        col_id = f"perfect_{id}"
-        # print(f"{id}: {df[col_id].sum()}")
-        labels.append(correction.name[:3])
-
-    ids = [f"rel_errors_{correction.name.lower()}" for correction in corrections]
-    bins = [0, 0.05, 0.1, 0.2, 0.4, 0.6, 1]
-    cuts = [
-        pd.cut(
-            df[id].dropna(),
-            bins=bins,
-            include_lowest=True
-        ).value_counts(sort=False)
-        for id in ids
-    ]
-    df2 = pd.concat(cuts, axis=1)
-    df2.columns = labels
-    fig, ax = plt.subplots()
-    df2.plot.bar(ax=ax)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
-    # ax.set_yscale("log")
-    # ax.hist(df[ids].values, bins=bins)
-    # ax.set_yscale("log")
-
     # for correction in corrections:
     #     df3.plot.pie(y=correction.name[:3])
     # df3.plot.pie(y="ZBAR")
-    # from matplotlib.figure import Axes
-    fig, ax = plt.subplots()
-    df3.plot.bar(ax=ax)
-    ax.get_legend().remove()
-    ax.set_ylim(0, 1)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
-    fig.savefig('data/results/read_with_loc.png', bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
-    fig, ax = plt.subplots()
-    df4.plot.bar(ax=ax)
-    ax.get_legend().remove()
-    ax.set_ylim(0, 1)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
-    # fig.savefig('data/results/read_without_loc.png', bbox_inches='tight', pad_inches=0)
-    # fig.savefig('data/results/defaff.png', bbox_inches='tight', pad_inches=0)
-    # fig.savefig('data/results/defpro.png', bbox_inches='tight', pad_inches=0)
-    # fig.savefig('data/results/defcyl.png', bbox_inches='tight', pad_inches=0)
-    fig.savefig('data/results/deftps.png', bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
 
+    def plot_bars_reads(df_base: pd.DataFrame, filename: str, zbar: bool = True) -> None:
+        total_base = df_base[IMAGE_ID].count()
+        values = []
+        index = copy.deepcopy(corrections_labels)
+        for correction in corrections:
+            col_id = f"read_{correction.name.lower()}"
+            values.append(df_base[df_base[col_id] == True][col_id].count() / total_base)
+        if zbar:
+            values.append(df_base[ZBAR].sum() / total_base)
+            index += ["ZBAR"]
+        dict_aux = {
+            "QRs localizable by our framework": values
+        }
+        df_aux = pd.DataFrame(dict_aux, index=index)
+
+        fig, ax = plt.subplots()
+        df_aux.plot.bar(ax=ax)
+        ax.get_legend().remove()
+        ax.set_ylim(0, 1)
+        ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
+        file_path = RESULTS_DIR / f"{filename}.png"
+        fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
+        print(f"   -> Saved to the file {file_path}")
+        plt.close(fig)
+
+    def plot_points_reads(df_base: pd.DataFrame, filename: str, zbar: bool = True) -> None:
+        total_base = df_base[IMAGE_ID].count()
+        values = []
+        index = copy.deepcopy(corrections_labels)
+        for correction in corrections:
+            col_id = f"read_{correction.name.lower()}"
+            values.append(df_base[df_base[col_id] == True][col_id].count() / total_base)
+        if zbar:
+            values.append(df_base[ZBAR].sum() / total_base)
+            index += ["ZBAR"]
+        dict_aux = {
+            "QRs localizable by our framework": values
+        }
+        df_aux = pd.DataFrame(dict_aux, index=index)
+
+        lis = []
+        points = []
+        defos = [Deformation.AFFINE, Deformation.PERSPECTIVE, Deformation.CYLINDRIC, Deformation.SURFACE]
+        for i, correction in enumerate(corrections):
+            for j, defo in enumerate(defos):
+                col_id = f"read_{correction.name.lower()}"
+                points.append([i + 1, j + 1])
+                lis.append(df_base[df_base[DEFORMATION] == defo][col_id].sum() / df_base[df_base[DEFORMATION] == defo][IMAGE_ID].count())
+
+        points = np.array(points)
+        lis1 = np.array(lis)
+        print(lis1)
+        lis = np.exp(lis1 * 5 + 1) * 10
+        print(lis)
+
+        fig, ax = plt.subplots()
+        # df_aux.plot.bar(ax=ax)
+        ax.scatter(*points.T, s=lis,)
+        ax.set_ylim(0, 5)
+        ax.set_xlim(0, 5)
+        ax.set_xticks(range(1, 5))
+        ax.set_xticklabels(corrections_labels)
+        ax.set_yticks(range(1, 5))
+        ax.set_yticklabels(["Affine", "Projective", "Cylindrical", "Random"])
+        # ax.get_legend().remove()
+        # ax.set_ylim(0, 1)
+        # ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
+        file_path = RESULTS_DIR / f"{filename}.png"
+        # fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
+        # print(f"   -> Saved to the file {file_path}")
+        # plt.close(fig)
+
+    def plot_rel_error_by_method(df_base: pd.DataFrame, filename: str, logy: bool = True) -> None:
+        ids = [f"rel_errors_{correction.name.lower()}" for correction in corrections]
+        bins = [0, 0.05, 0.1, 0.2, 0.4, 0.6, 1]
+        cuts = [
+            pd.cut(
+                df_base[id].dropna(),
+                bins=bins,
+                include_lowest=True
+            ).value_counts(sort=False)
+            for id in ids
+        ]
+        df_aux = pd.concat(cuts, axis=1)
+        df_aux.columns = corrections_labels
+        fig, ax = plt.subplots()
+        df_aux.plot.bar(ax=ax)
+        ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
+        if logy:
+            ax.set_yscale("log")
+
+        file_path = RESULTS_DIR / f"{filename}.png"
+        fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
+        print(f"   -> Saved to the file {file_path}")
+        plt.close(fig)
+
+    def plot_rel_error_by_method2(df_base: pd.DataFrame, filename: str, logy: bool = True) -> None:
+        ids = [f"rel_errors_{correction.name.lower()}" for correction in corrections]
+        bins = [0, 0.05, 0.1, 0.2, 0.4, 0.6, 1]
+        fig, ax = plt.subplots()
+        ax.hist(df_base[ids].values, bins=bins)
+        if logy:
+            ax.set_yscale("log")
+
+        file_path = RESULTS_DIR / f"{filename}.png"
+        fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
+        print(f"   -> Saved to the file {file_path}")
+        plt.close(fig)
+
+    def plot_rel_error_by_method3(df_base: pd.DataFrame, filename: str, logy: bool = True) -> None:
+        ids = [f"rel_errors_{correction.name.lower()}" for correction in corrections]
+        fig, ax = plt.subplots()
+        n, b, _ = ax.hist(df_base[ids[3]].values, bins=np.linspace(0, 1, 50), histtype="step")
+        if logy:
+            ax.set_yscale("log")
+
+        # fig, ax = plt.subplots()
+        # ax.plot(b[:-1], n)
+        # if logy:
+        #     ax.set_yscale("log")
+
+        file_path = RESULTS_DIR / f"{filename}.png"
+        # fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
+        print(f"   -> Saved to the file {file_path}")
+        # plt.close(fig)
+
+    def plot_rel_error_by_method4(df_base: pd.DataFrame, filename: str, logy: bool = True) -> None:
+        ids = [f"rel_errors_{correction.name.lower()}" for correction in corrections]
+        num_bins = 50
+        bins = np.linspace(0, 0.5, num_bins)
+        cuts = [
+            pd.cut(
+                df_base[id].dropna(),
+                bins=bins,
+                include_lowest=True
+            ).value_counts(sort=False)
+            for id in ids
+        ]
+        df_aux = pd.concat(cuts, axis=1)
+        df_aux.index = bins[:-1]
+        df_aux.columns = corrections_labels
+
+        ticks = np.linspace(0, num_bins, 6)
+        df_aux.plot.bar(subplots=True, sharex=True, width=1, logy=True, ylim=(0.5, 1001), xticks=ticks, figsize=(7, 9), title=["", "", "", ""])
+        plt.xticks(ticks, ["0%", "10%", "20%", "30%", "40%", "50%"], rotation="horizontal")
+        plt.xlabel("Ratio of QR Pixels failed")
+
+        file_path = RESULTS_DIR / f"{filename}.png"
+        plt.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
+        print(f"   -> Saved to the file {file_path}")
+        plt.close()
+
+    print(" - Figures TODO:")
+    plot_points_reads(df, "read_with_locn")
+    plot_bars_reads(df, "read_with_loc")
+    plot_bars_reads(df_loc, "read_without_loc")
+    plot_bars_reads(df_loc[df_loc[DEFORMATION] == Deformation.AFFINE], "defaff")
+    plot_bars_reads(df_loc[df_loc[DEFORMATION] == Deformation.PERSPECTIVE], "defpro")
+    plot_bars_reads(df_loc[df_loc[DEFORMATION] == Deformation.CYLINDRIC], "defcyl")
+    plot_bars_reads(df_loc[df_loc[DEFORMATION] == Deformation.SURFACE], "deftps")
+    print()
+
+    print(" - Figures TODO:")
+    # plot_rel_error_by_method(df, "rel_errors")
+    # plot_rel_error_by_method(df[df[DEFORMATION] == Deformation.AFFINE], "rel_errors_daff")
+    # plot_rel_error_by_method(df[df[DEFORMATION] == Deformation.PERSPECTIVE], "rel_errors_dpro")
+    # plot_rel_error_by_method(df[df[DEFORMATION] == Deformation.CYLINDRIC], "rel_errors_dcyl")
+    # plot_rel_error_by_method(df[df[DEFORMATION] == Deformation.SURFACE], "rel_errors_dtps")
+    # plot_rel_error_by_method3(df, "rel_errors")
+    # plot_rel_error_by_method3(df[df[DEFORMATION] == Deformation.AFFINE], "rel_errors_daff")
+    # plot_rel_error_by_method3(df[df[DEFORMATION] == Deformation.PERSPECTIVE], "rel_errors_dpro")
+    # plot_rel_error_by_method3(df[df[DEFORMATION] == Deformation.CYLINDRIC], "rel_errors_dcyl")
+    # plot_rel_error_by_method3(df[df[DEFORMATION] == Deformation.SURFACE], "rel_errors_dtps")
+    plot_rel_error_by_method4(df, "rel_errors")
+    print()
+
+    print(" - Descriptive table of the relative error:\n")
     ids = [f"rel_errors_{correction.name.lower()}" for correction in corrections]
-
-    df5 = pd.DataFrame(
+    df_aux = pd.DataFrame(
         [df[ids].mean().values, df[ids].std().values],
-        columns=[correction.name[:3] for correction in corrections],
+        columns=corrections_labels,
         index=["Mean of the relative error", "Std. Dev. of the relative error"]
     )
-    df5 = df5.round(4)
-    filename = "data/results/rel_errors.csv"
-    df5.to_csv(filename)
-    print(" - Descriptive table of the relative error by method:\n")
-    print(df5)
-    print(f"\n   -> Saved to the file {filename}")
+    df_aux = df_aux.round(4)
+    print(df_aux)
+    file_path = RESULTS_DIR / "rel_errors.csv"
+    df_aux.to_csv(str(file_path))
+    print(f"\n   -> Saved to the file {file_path}")
+    del file_path
+    del df_aux
+    del ids
 
     plt.show()
-
-

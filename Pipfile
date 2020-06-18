@@ -6,19 +6,19 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
-qrcode = {extras = ["pil"],version = "*"}
-pillow = "*"
-numpy = "*"
-opencv-python-headless = "*"
-imageio = "*"
-scikit-image = "*"
-matplotlib = "*"
-pyzbar = "*"
-tqdm = "*"
+qrcode = {extras = ["pil"], version = "==6.1"}
+numpy = "==1.18.5"
+imageio = "==2.8.0"
+scikit-image = "==0.16.2"
+matplotlib = "==3.2.1"
+pyzbar = "==0.1.8"
+tqdm = "==4.46.0"
+click = "==7.1.2"
+imgaug = "==0.4.0"
+pandas = "==1.0.4"
+scikit-learn = "==0.23.1"
 scipy = "*"
-scikit-learn = "*"
-click = "*"
-pandas = "*"
+Pillow = "==7.1.2"
 
 [requires]
 python_version = "3.7"

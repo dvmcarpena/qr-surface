@@ -7,6 +7,14 @@ from .models import Features
 
 
 def find_all_features(image: np.ndarray, **kwargs) -> Features:
+    """
+    Find all features in an image, and save it in the Features object
+
+    :param image: Image where we want to find the features
+    :param kwargs: Keyword arguments for the finder functions
+
+    :return: Structure describing all the features found
+    """
     bw_image = rgb2binary(image)
     return Features(
         image=image,

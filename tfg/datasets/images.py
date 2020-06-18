@@ -12,6 +12,9 @@ from tfg.qrsurface import BadModules, Correction, QRErrorId
 
 @unique
 class ErrorCorrection(Enum):
+    """
+    Enumeration of the valid types of error correction
+    """
     L = 1
     M = 0
     Q = 3
@@ -20,6 +23,9 @@ class ErrorCorrection(Enum):
 
 @unique
 class Deformation(Enum):
+    """
+    Enumeration of the valid types of deformation
+    """
     AFFINE = auto()
     PERSPECTIVE = auto()
     CYLINDRIC = auto()
@@ -28,6 +34,9 @@ class Deformation(Enum):
 
 @dataclass
 class LabeledQRCode:
+    """
+    Representation of the information contained in a QR Code
+    """
     deformation: str
     correction_error: Optional[Dict[Correction, Optional[QRErrorId]]]
     bad_modules: Optional[Dict[Correction, BadModules]]
@@ -35,6 +44,9 @@ class LabeledQRCode:
 
 @dataclass
 class LabeledImage:
+    """
+    All the information related to a image of a dataset
+    """
     path: Path
     data_path: Path
     dataset: str
@@ -52,6 +64,13 @@ class LabeledImage:
 
     @classmethod
     def from_path(cls, path: Path) -> 'LabeledImage':
+        """
+        Reads a label image from a path given
+
+        :param path: A path to the image
+
+        :return: The labeled image
+        """
         dataset_dir = path.parent.parent
         dataset = dataset_dir.name
 
@@ -131,6 +150,14 @@ class LabeledImage:
     @classmethod
     def search_labeled_images(cls, labeled_images_dir: Path,
                               filter_func: Optional[Callable[['LabeledImage'], bool]] = None) -> List['LabeledImage']:
+        """
+        Search for all the images and datasets at the path given
+
+        :param labeled_images_dir: The root path for searching for datasets
+        :param filter_func: A filter function that chooses the target images
+
+        :return: A list of labeled images
+        """
         return list(filter(filter_func if filter_func is not None else lambda _: True, (
             cls.from_path(image)
             for dataset in labeled_images_dir.iterdir()
@@ -138,9 +165,19 @@ class LabeledImage:
         )))
 
     def read_image(self) -> np.ndarray:
+        """
+        Reads the image
+
+        :return: The image as numpy array
+        """
         return np.array(imageio.imread(str(self.path)))
 
     def has_error(self) -> bool:
+        """
+        Wether the image has any type of error
+
+        :return: Wether the image has any type of error
+        """
         return (
             self.localization_error is not None
             or any(
@@ -151,16 +188,31 @@ class LabeledImage:
         )
 
     def load_raw_data(self) -> Dict:
+        """
+        Load the data from the label files
+
+        :return: The data from the label files
+        """
         return json.loads(self.data_path.read_text())
 
     def save_raw_data(self, data: Dict) -> None:
+        """
+        Save the data given to the label files
+
+        :param data: The new data from the label files
+        """
         self.data_path.write_text(json.dumps(data))
 
     def update_localization_error(self, localization_error: QRErrorId, diff: Optional[Dict], update: bool = False):
+        """
+        Update information about the localization_error
+
+        :param localization_error: The localization error
+        :param diff: Whether to print the diff from the last state
+        :param update: Whether to update the label files
+        """
         source = None
         if self.localization_error is None:
-            # if self.qrs is not None:
-            #     source = self.qrs
             changes = True
         elif self.localization_error != localization_error:
             changes = True
@@ -218,11 +270,30 @@ class LabeledImage:
 
     def update_successful_correction(self, correction: Correction, qr_index: int, bad_modules: BadModules,
                                      diff: Optional[Dict], update: bool = False) -> bool:
+        """
+        Update information about the a successful correction
+
+        :param correction: The correction used
+        :param qr_index: The index of QR
+        :param bad_modules: The number of bad modules fail
+        :param diff: Whether to print the diff from the last state
+        :param update: Whether to update the label files
+        """
         return self._update_correction(correction, qr_index, bad_modules, None, diff, update=update)
 
     def update_correction_error(self, correction: Correction, qr_index: int, bad_modules: BadModules,
                                 correction_error: Optional[QRErrorId], diff: Optional[Dict],
                                 update: bool = False) -> bool:
+        """
+        Update information about the correction error
+
+        :param correction: The correction used
+        :param qr_index: The index of QR
+        :param bad_modules: The number of bad modules fail
+        :param correction_error: The correction error
+        :param diff: Whether to print the diff from the last state
+        :param update: Whether to update the label files
+        """
         return self._update_correction(correction, qr_index, bad_modules, correction_error, diff, update=update)
 
     def _update_correction(self, correction: Correction, qr_index: int, bad_modules: BadModules,
@@ -326,6 +397,14 @@ class LabeledImage:
         return changes_correction or changes_bad_mod
 
     def update_zbar(self, zbar: bool, zbar_err: Optional[QRErrorId], diff: Optional[Dict], update: bool = False):
+        """
+        Update information about zbar
+
+        :param zbar: If zbar was used
+        :param zbar_err: The ZBar error
+        :param diff: Whether to print the diff from the last state
+        :param update: Whether to update the label files
+        """
         if self.zbar is None:
             changes = True
         elif self.zbar != zbar:

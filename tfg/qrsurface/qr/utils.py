@@ -5,6 +5,7 @@ import numpy as np
 from scipy.spatial import distance
 from scipy import spatial
 from sklearn import cluster
+from skimage import transform
 
 from ..utils import get_size_from_version, get_alignments_centers
 from ..features import AlignmentPattern, FinderPattern
@@ -14,6 +15,13 @@ OrderedFinderPatterns = Tuple[FinderPattern, FinderPattern, FinderPattern]
 
 
 def group_finder_patterns(finder_patterns: List[FinderPattern]) -> Iterator[List[FinderPattern]]:
+    """
+    Given a list of finder patterns, returns an iterable of groups of 3 finder patterns
+
+    :param finder_patterns: A list of finder patterns
+
+    :return: An iterable of groups of 3 finder patterns
+    """
     if len(finder_patterns) < 3:
         return
     if len(finder_patterns) == 3:
@@ -43,6 +51,13 @@ def group_finder_patterns(finder_patterns: List[FinderPattern]) -> Iterator[List
 
 
 def orientate_finder_patterns(finder_patterns: List[FinderPattern]) -> OrderedFinderPatterns:
+    """
+    Given three finder patterns, orientate them in the same order based on their position in the ideal QR Code
+
+    :param finder_patterns: A list of three finder pattern
+
+    :return: The same list reordered
+    """
     assert len(finder_patterns) == 3
 
     centers = [f.center for f in finder_patterns]
@@ -67,9 +82,6 @@ def orientate_finder_patterns(finder_patterns: List[FinderPattern]) -> OrderedFi
 
     ab = diagonal_centers[0] - first_center
     bc = diagonal_centers[1] - first_center
-    # minor = np.linalg.det(np.stack(((ab / np.linalg.norm(ab))[-2:],
-    #                                 (bc / np.linalg.norm(bc))[-2:])))
-
     if np.sign(np.linalg.det(np.stack((ab, bc)))) < 0:
         fins = f1, f2, f3
     else:
@@ -105,7 +117,7 @@ def orientate_finder_patterns(finder_patterns: List[FinderPattern]) -> OrderedFi
             new_cors[1] = c
         elif new_cor[0] > 0  and new_cor[1] > 0:
             new_cors[2] = c
-        else:# new_cor[0] < 0  and new_cor[1] > 0:
+        else:
             new_cors[3] = c
     f1.corners = np.array(new_cors)
 
@@ -155,6 +167,13 @@ def orientate_finder_patterns(finder_patterns: List[FinderPattern]) -> OrderedFi
 
 
 def guess_version_from_finders(finder_patterns: OrderedFinderPatterns) -> int:
+    """
+    Given three ordered finder patterns, tries to guess by the cross ratio method the version
+
+    :param finder_patterns: Three ordered finder patterns
+
+    :return: The guess for the version
+    """
     version_points = np.array([
         finder_patterns[0].corners[0].tolist(),
         finder_patterns[0].corners[3].tolist(),
@@ -168,36 +187,27 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
                                 version: int,
                                 alignment_patterns: List[AlignmentPattern]
                                 ) -> List[AlignmentPattern]:
-    final_ap = []
+    """
+    Choose which alignment pattern correspond to this QR Code and order them
 
+    :param finder_patterns: Three ordered finder patterns
+    :param version: Version of the QR Code
+    :param alignment_patterns: List of all the alignment patterns found in the image
+
+    :return: The QR Code ordered alignment patterns
+    """
+    final_ap = []
     f1, f2, f3 = finder_patterns
-    # v1 = f2.center - f1.center
-    # v2 = f3.center - f1.center
     v1 = f2.corners[1] - f1.corners[0]
     v2 = f3.corners[3] - f1.corners[0]
     det = v1[0] * v2[1] - v1[1] * v2[0]
-    mat = np.array([
-        [v2[1] / det, - v2[0] / det, 0],
-        [- v1[1] / det, v1[0] / det, 0],
-        [0, 0, 1]
-    ]) @ np.array([
-        # [1, 0, - f1.center[0]],
-        # [0, 1, - f1.center[1]],
-        [1, 0, - f1.corners[0][0]],
-        [0, 1, - f1.corners[0][1]],
-        [0, 0, 1]
-    ])
-    from skimage import transform
 
     eps = 1e-4
-
     x11 = f2.corners[1][0]
     y11 = f2.corners[1][1]
     x12 = f2.corners[2][0]
     y12 = f2.corners[2][1]
 
-    # a1 = (y11 - y12) / (x11 - x12)
-    # b1 = y11 - a1 * x11
     if abs(x11 - x12) <= eps:
         a1 = 1
         b1 = 0
@@ -211,8 +221,6 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
     x22 = f3.corners[2][0]
     y22 = f3.corners[2][1]
 
-    # a2 = (y21 - y22) / (x21 - x22)
-    # b2 = y21 - a2 * x21
     if abs(x21 - x22) <= eps:
         a2 = 1
         b2 = 0
@@ -221,8 +229,6 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
         b2 = 1
     c2 = a2 * x21 + b2 * y21
 
-    # x = (b2 - b1) / (a1 - a2)
-    # y = a1 * x + b1
     fourth_corner = np.linalg.solve(np.array([[a1, b1], [a2, b2]]), np.array([c1, c2]))
 
     _src = np.array([
@@ -241,98 +247,29 @@ def choose_and_order_alignments(finder_patterns: OrderedFinderPatterns,
     _m = transform.ProjectiveTransform()
     _m.estimate(_src, _dst)
 
-    # limits_qr = (-0.25, 1.25)
-    # limits_qr = (-0.1, 1.1)
     limits_qr = (0, 1)
     for ap in alignment_patterns:
-        # new_ap = (mat @ np.array([
-        #     [ap.center[0]],
-        #     [ap.center[1]],
-        #     [1]
-        # ])).T[0]
         new_ap = _m(ap.center)[0]
-
         if limits_qr[0] < new_ap[0] < limits_qr[1] and limits_qr[0] < new_ap[1] < limits_qr[1]:
             final_ap.append(ap)
-
-    # if len(final_ap) != get_num_aligns_from_version(version):
-    #     warnings.warn(f"Found {len(final_ap)} alignment patterns, but with the "
-    #                   f"estimed version {version} it should have "
-    #                   f"{get_num_aligns_from_version(version)}.")
 
     ideal_positions = get_alignments_centers(version)
     total_size = get_size_from_version(version)
     ideal_positions = np.array(ideal_positions) / total_size
 
     def transf(ap: AlignmentPattern) -> Tuple[AlignmentPattern, np.ndarray]:
-        # return ap, (mat @ np.array([
-        #     [ap.center[0]],
-        #     [ap.center[1]],
-        #     [1]
-        # ])).T[0][:2]
         return ap, _m(ap.center)[0]
 
-
     ordered_ap = []
-
     if len(ideal_positions) > 0:
         ideal_positions = ideal_positions[np.lexsort((ideal_positions[:, 0], ideal_positions[:, 1]))]
 
-        # print(np.array([c for ap, c in map(transf, final_ap)]))
-        # print(ideal_positions)
-        # from scipy import spatial
-        # dists = spatial.distance_matrix(
-        #     np.array([c for ap, c in map(transf, final_ap)]),
-        #     ideal_positions
-        # )
-        # selection = np.argmin(dists, axis=0)
-        # selection2 = np.argmin(dists, axis=1)
-
-        # def transfm1(point):
-        #     # return (np.linalg.inv(mat) @ np.array([
-        #     #     [point[0]],
-        #     #     [point[1]],
-        #     #     [1]
-        #     # ])).T[0][:2]
-        #     return _m.inverse(point)[0]
-
-        # # print(dists)
-        # print(selection)
-        # print(selection2)
-        # # print(np.unique(selection, return_inverse=True, return_counts=True))
-        # if len(np.unique(selection)) < min(get_num_aligns_from_version(version)):
-        #     np.unique(selection, return_counts=True)
-        #
-        # print(np.array([c for ap, c in map(transf, final_ap)]))
-        # print(ideal_positions)
-        # print(final_ap)
-        # ordered_ap = np.array(final_ap)[selection].tolist()
-        # print(ordered_ap)
-
-        # cor1 = transfm1([0, 0])
-        # cor2 = transfm1([1, 0])
-        # cor3 = transfm1([0, 1])
-        # cor4 = transfm1([1, 1])
-
-        # plt.scatter(fourth_corner[1], fourth_corner[0])
-        # plt.scatter([cor1[1], cor2[1], cor3[1], cor4[1]],
-        #             [cor1[0], cor2[0], cor3[0], cor4[0]])
-        # plt.scatter([f1.corners[0][1], f2.corners[1][1], f3.corners[3][1]],
-        #             [f1.corners[0][0], f2.corners[1][0], f3.corners[3][0]])
-
-        # rad = 1.5 * ideal_positions[0][1]
         rad = 0.5 * ideal_positions[0][1]
         for ideal_align in ideal_positions:
             margins = (
                 (ideal_align[0] - rad, ideal_align[1] - rad),
                 (ideal_align[0] + rad, ideal_align[1] + rad)
             )
-            # _p1 = transfm1(margins[0])
-            # _p2 = transfm1(margins[1])
-            # i = transfm1(ideal_align)
-
-            # plt.scatter([_p1[1], _p2[1]], [_p1[0], _p2[0]])
-            # plt.scatter(i[1], i[0])
 
             candidates = [
                 (ap, c)
@@ -355,36 +292,28 @@ def find_fourth_corner(bw_image: np.ndarray,
                        finder_patterns: OrderedFinderPatterns,
                        version: int,
                        alignment_patterns: List[AlignmentPattern]) -> Optional[np.ndarray]:
-    final_ap = []
+    """
+    Find the fourth corner of a QR Code
 
+    :param bw_image: Binarized image
+    :param finder_patterns: Three ordered finder patterns
+    :param version: Version of the QR Code
+    :param alignment_patterns: List of ordered alignment patterns
+
+    :return: The guess for the fourth corner
+    """
+    final_ap = []
     f1, f2, f3 = finder_patterns
-    # v1 = f2.center - f1.center
-    # v2 = f3.center - f1.center
     v1 = f2.corners[1] - f1.corners[0]
     v2 = f3.corners[3] - f1.corners[0]
     det = v1[0] * v2[1] - v1[1] * v2[0]
-    mat = np.array([
-        [v2[1] / det, - v2[0] / det, 0],
-        [- v1[1] / det, v1[0] / det, 0],
-        [0, 0, 1]
-    ]) @ np.array([
-        # [1, 0, - f1.center[0]],
-        # [0, 1, - f1.center[1]],
-        [1, 0, - f1.corners[0][0]],
-        [0, 1, - f1.corners[0][1]],
-        [0, 0, 1]
-    ])
-    from skimage import transform
 
     eps = 1e-4
-
     x11 = f2.corners[1][0]
     y11 = f2.corners[1][1]
     x12 = f2.corners[2][0]
     y12 = f2.corners[2][1]
 
-    # a1 = (y11 - y12) / (x11 - x12)
-    # b1 = y11 - a1 * x11
     if abs(x11 - x12) <= eps:
         a1 = 1
         b1 = 0
@@ -398,8 +327,6 @@ def find_fourth_corner(bw_image: np.ndarray,
     x22 = f3.corners[2][0]
     y22 = f3.corners[2][1]
 
-    # a2 = (y21 - y22) / (x21 - x22)
-    # b2 = y21 - a2 * x21
     if abs(x21 - x22) <= eps:
         a2 = 1
         b2 = 0
@@ -408,8 +335,6 @@ def find_fourth_corner(bw_image: np.ndarray,
         b2 = 1
     c2 = a2 * x21 + b2 * y21
 
-    # x = (b2 - b1) / (a1 - a2)
-    # y = a1 * x + b1
     fourth_corner = np.linalg.solve(np.array([[a1, b1], [a2, b2]]), np.array([c1, c2]))
 
     _src = np.array([
@@ -428,24 +353,12 @@ def find_fourth_corner(bw_image: np.ndarray,
     _m = transform.ProjectiveTransform()
     _m.estimate(_src, _dst)
 
-    # limits_qr = (-0.25, 1.25)
-    # limits_qr = (-0.1, 1.1)
     limits_qr = (0, 1)
     for ap in alignment_patterns:
-        # new_ap = (mat @ np.array([
-        #     [ap.center[0]],
-        #     [ap.center[1]],
-        #     [1]
-        # ])).T[0]
         new_ap = _m(ap.center)[0]
 
         if limits_qr[0] < new_ap[0] < limits_qr[1] and limits_qr[0] < new_ap[1] < limits_qr[1]:
             final_ap.append(ap)
-
-    # if len(final_ap) != get_num_aligns_from_version(version):
-    #     warnings.warn(f"Found {len(final_ap)} alignment patterns, but with the "
-    #                   f"estimed version {version} it should have "
-    #                   f"{get_num_aligns_from_version(version)}.")
 
     ideal_positions = get_alignments_centers(version)
     total_size = get_size_from_version(version)
@@ -459,8 +372,6 @@ def find_fourth_corner(bw_image: np.ndarray,
         ideal_align = _m(f1.corners[2])[0]
 
     sides = 1.2 * (np.array([1, 1]) - ideal_align)
-    # image[ideal_align[1]:ideal_align[1] + sides[1], ideal_align[0]:ideal_align[0] + sides[0]]
-
     src = np.array([
         _m.inverse(ideal_align)[0].tolist(),
         _m.inverse(ideal_align + np.array([sides[0], 0]))[0].tolist(),
@@ -486,14 +397,6 @@ def find_fourth_corner(bw_image: np.ndarray,
         order=0,
         mode="edge"
     )
-    # import matplotlib.pyplot as plt
-    # plt.figure()
-    # plt.imshow(bw_trimmed)
-    # plt.show()
-
-    # gray_image: np.ndarray = color.rgb2gray(trimmed)
-    # threshold: np.ndarray = filters.threshold_sauvola(gray_image, 151)
-    # bw_image: np.ndarray = gray_image > threshold
     fourth_corner = corner_scan(
         bw_trimmed,
         2,
@@ -502,20 +405,6 @@ def find_fourth_corner(bw_image: np.ndarray,
         blank_radius=1
     )
 
-    # import matplotlib.pyplot as plt
-    # plt.figure()
-    # plt.figure()
-    # plt.imshow(bw_image)
-    # plt.scatter(*fourth_corner.T)
-    # plt.figure()
-    # plt.imshow(image)
-    # plt.scatter(*(tr.inverse(fourth_corner)[0]).T)
-    # plt.scatter(*(_m.inverse(ideal_align)[0])[::-1].T)
-    # plt.scatter(*(_m.inverse(ideal_align + np.array([sides[0], 0]))[0])[::-1].T)
-    # plt.scatter(*(_m.inverse(ideal_align + np.array([0, sides[1]]))[0])[::-1].T)
-    # plt.scatter(*(_m.inverse(ideal_align + sides[1])[0])[::-1].T)
-    # plt.show()
-
     return tr.inverse(fourth_corner)[0][::-1] if fourth_corner is not None else None
 
 
@@ -523,11 +412,11 @@ def guess_version(version_points: np.ndarray) -> int:
     """
     Algorithm that find the version of a QR code using 2 outer corners of 2 of the
     position patters, that need to be on the same side of the QR, and that side
-    needs to be close to being straight.
+    needs to be close to being straight
 
-    :param version_points: Array of 2 outer corners of 2 of the position patters.
+    :param version_points: Array of 2 outer corners of 2 of the position patters
 
-    :return: The version guessed from the points given.
+    :return: The version guessed from the points given
     """
     dists = spatial.distance_matrix(version_points, version_points, p=2)
     cross_ratio = (dists[0, 2] * dists[1, 3]) / (dists[0, 3] * dists[1, 2])

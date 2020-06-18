@@ -8,6 +8,14 @@ from .models import FinderPattern
 
 
 def find_finder_patterns_ratios(bw_image: np.ndarray, **kwargs) -> List[FinderPattern]:
+    """
+    Find all the finder patterns in a image given
+
+    :param bw_image: The binarized image
+    :param kwargs: Keyword arguments for future extensions
+
+    :return: The list of finder patterns found
+    """
     return list(map(
         lambda t: FinderPattern.from_center_and_ratios(
             image=bw_image,
@@ -17,35 +25,41 @@ def find_finder_patterns_ratios(bw_image: np.ndarray, **kwargs) -> List[FinderPa
         ),
         find_general(
             bw_image=bw_image,
-            iratios=[1, 1, 3, 1, 1],#[1, 1, 1, 3, 1, 1, 1],
+            iratios=[1, 1, 3, 1, 1],
             center_color=False,
-            strict_border=True,#False
+            strict_border=True,
             diagonals=True,
             countours=False
         )
     ))
 
 
-def find_finder_patterns_areas(bw_image: np.ndarray, **kwargs) -> List[FinderPattern]:
-    pass
-
-
 @unique
 class FinderPatternMethods(Enum):
+    """
+    All the possible method for finding finder patterns
+    """
     CLASSIC = auto()
-    AREAS = auto()
 
 
+# Mapper from identifier of localization method to the callable
 _FinderPatternFinder = Callable[..., List[FinderPattern]]
 _FINDER_PATTERN_METHODS_FUNCS: Dict[FinderPatternMethods, _FinderPatternFinder] = {
-    FinderPatternMethods.CLASSIC: find_finder_patterns_ratios,
-    FinderPatternMethods.AREAS: find_finder_patterns_areas
+    FinderPatternMethods.CLASSIC: find_finder_patterns_ratios
 }
 
 
-def find_finder_patterns(bw_image: np.ndarray,
-                         method: Optional[FinderPatternMethods] = None,
+def find_finder_patterns(bw_image: np.ndarray, method: Optional[FinderPatternMethods] = None,
                          **kwargs) -> List[FinderPattern]:
+    """
+    Find all the finder patterns in a image given
+
+    :param bw_image: The binarized image
+    :param method: The identifier of the method used
+    :param kwargs: Keyword arguments for future extensions
+
+    :return: The list of finder patterns found
+    """
     if method is None:
         method = FinderPatternMethods.CLASSIC
 
