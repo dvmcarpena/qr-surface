@@ -186,37 +186,6 @@ def read_results(images_dir: Path) -> None:
 
     print(f" - Relative read qrs by PRO in flat:\t\t\t\t\t{df[df[DATASET] == DATASET_FLAT][READ_PRO].sum() / t}")
 
-    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-    #     # print(df.describe())
-
-    # h = {
-    #     correction.name[:3]: []
-    #     for correction in corrections
-    # }
-    # for correction in corrections:
-    #     id = correction.name.lower()
-    #     col_id = f"read_{id}"
-    #     nread_c = df_loc[df_loc[col_id] == False][col_id].count()
-    #     col_id = f"perfect_{id}"
-    #     perf_c = df_loc[df_loc[col_id] == True][col_id].count()
-    #     rest_c = total_loc - nread_c - perf_c
-    #     h[correction.name[:3]] = [nread_c / total_loc, rest_c / total_loc, perf_c / total_loc]
-    # # print(h)
-    # df3 = pd.DataFrame(h, index=["Fail", "Read", "Read and without errors"])
-    #
-    # for correction in corrections:
-    #     id = correction.name.lower()
-    #     col_id = f"read_{id}"
-    #     nread_c = df_loc[df_loc[col_id] == False][col_id].count()
-    #     rest_c = total - nread_c
-    #     h[correction.name[:3]] = [nread_c, rest_c]
-    # h["ZBAR"] = [df["zbar"].sum(), total - df["zbar"].sum()]
-    # # print(h)
-    # df3 = pd.DataFrame(h, index=["Fail", "Read"])
-    # for correction in corrections:
-    #     df3.plot.pie(y=correction.name[:3])
-    # df3.plot.pie(y="ZBAR")
-
     def plot_bars_reads(df_base: pd.DataFrame, filename: str, zbar: bool = True) -> None:
         total_base = df_base[IMAGE_ID].count()
         values = []
@@ -237,6 +206,7 @@ def read_results(images_dir: Path) -> None:
         ax.get_legend().remove()
         ax.set_ylim(0, 1)
         ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
+        ax.set_yticklabels(list(map(lambda n: f"{int(n)}%", ax.get_yticks() * 100)))
         file_path = RESULTS_DIR / f"{filename}.png"
         fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
         print(f"   -> Saved to the file {file_path}")
@@ -260,34 +230,48 @@ def read_results(images_dir: Path) -> None:
         lis = []
         points = []
         defos = [Deformation.AFFINE, Deformation.PERSPECTIVE, Deformation.CYLINDRIC, Deformation.SURFACE]
-        for i, correction in enumerate(corrections):
-            for j, defo in enumerate(defos):
+        for i, defo in enumerate(defos):
+            df_defo = df_base[df_base[DEFORMATION] == defo]
+            total_def = df_defo[IMAGE_ID].count()
+            for j, correction in enumerate(corrections):
                 col_id = f"read_{correction.name.lower()}"
                 points.append([i + 1, j + 1])
-                lis.append(df_base[df_base[DEFORMATION] == defo][col_id].sum() / df_base[df_base[DEFORMATION] == defo][IMAGE_ID].count())
+                lis.append(df_defo[col_id].sum() / total_def)
 
         points = np.array(points)
         lis1 = np.array(lis)
         print(lis1)
-        lis = np.exp(lis1 * 5 + 1) * 10
+        lis = np.exp(lis1 * 5 + 1) * 6
         print(lis)
 
         fig, ax = plt.subplots()
         # df_aux.plot.bar(ax=ax)
-        ax.scatter(*points.T, s=lis,)
+        ax.scatter(*points.T, s=lis, c=lis1*0.4 + 0.6, cmap='winter', alpha=0.9)
         ax.set_ylim(0, 5)
         ax.set_xlim(0, 5)
         ax.set_xticks(range(1, 5))
-        ax.set_xticklabels(corrections_labels)
+        ax.set_yticklabels(corrections_labels)
+        ax.set_xlabel("Deformations")
         ax.set_yticks(range(1, 5))
-        ax.set_yticklabels(["Affine", "Projective", "Cylindrical", "Random"])
+        ax.set_xticklabels(["Affine", "Projective", "Cylindrical", "Random"])
+        ax.set_ylabel("Corrections")
+
+        for label, x, y in zip(map(lambda x: f"{x}%", lis1.round(2)*100), points[:, 0], points[:, 1]):
+            plt.annotate(
+                label,
+                xy=(x, y), xytext=(-4, 4),
+                textcoords='offset points', ha='right', va='bottom',
+                # bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.9)#, alpha=0.5),
+                #arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
+            )
+
         # ax.get_legend().remove()
         # ax.set_ylim(0, 1)
         # ax.set_xticklabels(ax.get_xticklabels(), rotation="horizontal")
         file_path = RESULTS_DIR / f"{filename}.png"
-        # fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
-        # print(f"   -> Saved to the file {file_path}")
-        # plt.close(fig)
+        fig.savefig(str(file_path), bbox_inches='tight', pad_inches=0)
+        print(f"   -> Saved to the file {file_path}")
+        plt.close(fig)
 
     def plot_rel_error_by_method(df_base: pd.DataFrame, filename: str, logy: bool = True) -> None:
         ids = [f"rel_errors_{correction.name.lower()}" for correction in corrections]
@@ -370,7 +354,7 @@ def read_results(images_dir: Path) -> None:
         plt.close()
 
     print(" - Figures TODO:")
-    plot_points_reads(df, "read_with_locn")
+    plot_points_reads(df_loc, "points_reads")
     plot_bars_reads(df, "read_with_loc")
     plot_bars_reads(df_loc, "read_without_loc")
     plot_bars_reads(df_loc[df_loc[DEFORMATION] == Deformation.AFFINE], "defaff")
@@ -400,7 +384,7 @@ def read_results(images_dir: Path) -> None:
         columns=corrections_labels,
         index=["Mean of the relative error", "Std. Dev. of the relative error"]
     )
-    df_aux = df_aux.round(4)
+    df_aux = df_aux.round(4) * 100
     print(df_aux)
     file_path = RESULTS_DIR / "rel_errors.csv"
     df_aux.to_csv(str(file_path))
